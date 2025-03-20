@@ -16,27 +16,38 @@
         height: 100vh;
     }
 
-    //* Video container */
+    /* Video container */
     .video-container {
         width: 100%;
         display: flex;
         justify-content: center;
+        align-items: center;
         margin-top: 20px;
         margin-bottom: 20px;
-        flex-wrap: wrap; /* Allows wrapping if videos overflow */
-        justify-content: space-around; /* Distribute space around videos */
+        flex-wrap: nowrap; /* Keeps items from wrapping to the next line */
     }
 
-    /* Reduce the size of both video elements */
-    #interviewer-video, #candidate-video {
-        width: 400px; /* Smaller width for both videos */
-        height: 300px; /* Adjust height to maintain aspect ratio */
+    /* Candidate video */
+    #candidate-video {
+        width: 400px; /* Adjust width */
+        height: 300px; /* Adjust height */
         border: 2px solid #ddd;
         border-radius: 8px;
         background-color: black;
-        margin: 10px; /* Add space between videos */
+        margin: 10px;
         transform: scaleX(-1);
-}
+    }
+
+    /* 3D avatar container */
+    #three-d-avatar-container {
+        width: 400px; /* Adjust width */
+        height: 300px; /* Adjust height */
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        background-color: black;
+        margin: 10px;
+    }
+
 
 
     /* Chat container */
@@ -118,9 +129,10 @@
 <body>
     <!-- Video container for candidate and interviewer -->
     <div class="video-container">
-        <video id="interviewer-video" autoplay playsinline></video>
+        <div id="three-d-avatar-container"></div>
         <video id="candidate-video" autoplay playsinline></video>
     </div>
+
 
     <!-- Chat container for the chatbot -->
     <div class="chat-container">
@@ -134,15 +146,116 @@
     <audio id="audio-player" controls style="display:none;"></audio>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+
 
     <script>
     // Initialize Socket.io
-    const socket = io.connect("http://localhost:5000");
+    const socket = io.connect("http://127.0.0.1:5000");
 
     let localPeerConnection;
     let remotePeerConnection;
     let localStream;
     let remoteStream;
+
+    let scene, camera, renderer, avatar;
+    let head;
+
+    function init3DAvatar() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer();
+
+
+        scene.background = new THREE.Color(0xFFB6C1);
+
+        // Position the camera closer to the face
+        camera.position.set(0, 1.7, 2); // Adjust the z-value to zoom in closer to the face
+
+        // Optional: Adjust FOV to make it feel more zoomed in
+        camera.fov = 7; // Lower value zooms in, higher value zooms out
+        camera.updateProjectionMatrix(); // Update projection matrix after changing FOV
+        
+        const avatarContainer = document.getElementById('three-d-avatar-container');
+        camera.aspect = avatarContainer.offsetWidth / avatarContainer.offsetHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(avatarContainer.offsetWidth, avatarContainer.offsetHeight);
+        avatarContainer.appendChild(renderer.domElement);  // Append to the new container
+
+        // Add lighting to the scene
+        const light = new THREE.AmbientLight(0x404040, 5);  // Ambient light
+        scene.add(light);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);  // Directional light
+        directionalLight.position.set(1, 1, 1).normalize();
+        scene.add(directionalLight);
+
+        // Load the GLB avatar model using THREE.GLTFLoader
+        const loader = new THREE.GLTFLoader();
+        loader.load('http://127.0.0.1:5000/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
+            avatar = gltf.scene;
+            avatar.scale.set(1, 1, 1);  // Adjust the avatar scale
+            avatar.position.set(0, 0, 0);  // Position the avatar in the scene
+            scene.add(avatar);
+            avatar.traverse((child) => {
+                // console.log(child.name);  // Print names of all parts
+                if (child.name.toLowerCase().includes("head")) {
+                    head = child;  // Assign head if found
+                }
+                if (child.isMesh && child.morphTargetDictionary) {
+                    console.log(child.name, child.morphTargetDictionary);
+                }
+            });
+
+        }, undefined, function (error) {
+            console.error("Error loading GLB model:", error);
+        });
+
+        camera.position.z = 3;  // Adjust camera position
+    }
+
+    function animateMouth(intensity) {
+        avatar.traverse((child) => {
+            if (child.isMesh && child.morphTargetDictionary && child.name === "Wolf3D_Head") {
+                if ("mouthOpen" in child.morphTargetDictionary) {
+                    const openIndex = child.morphTargetDictionary["mouthOpen"];
+                    child.morphTargetInfluences[openIndex] = intensity;
+                }
+                if ("mouthSmile" in child.morphTargetDictionary) {
+                    const smileIndex = child.morphTargetDictionary["mouthSmile"];
+                    child.morphTargetInfluences[smileIndex] = intensity * 0.3; // Adjust smile effect
+                }
+            }
+        });
+    }
+
+    function syncMouthWithAudio() {
+        if (!avatar) return;
+        
+        if (!audioPlayer.paused) {
+            let mouthIntensity = Math.abs(Math.sin(performance.now() * 0.005)); // Smooth open/close
+            animateMouth(mouthIntensity);
+            requestAnimationFrame(syncMouthWithAudio);
+        } else {
+            animateMouth(0); // Keep mouth closed when no audio
+        }
+    }
+
+
+    function animate() {
+        requestAnimationFrame(animate);
+        // Rotate the avatar for animation (optional)
+        // if (avatar) {
+        //     avatar.rotation.y += 0.01;
+        // }
+
+        renderer.render(scene, camera);
+    }
+
+
 
     // Access the user's webcam
     async function startWebcam() {
@@ -188,36 +301,6 @@
 
     // Start webcam
     startWebcam();
-
-    // function muteMicrophone() {
-    //     localStream.getTracks().forEach(track => {
-    //         if (track.kind === 'audio') {
-    //             track.stop();  // This completely disables the audio track
-    //         }
-    //     });
-    // }
-
-    // function unmuteMicrophone() {
-    //     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-    //         .then(function(stream) {
-    //             localStream.addTrack(stream.getAudioTracks()[0]); // Re-enable the microphone by adding back the audio track
-    //         })
-    //         .catch(function(error) {
-    //             console.error("Error re-enabling microphone:", error);
-    //         });
-    // }
-
-
-    // // Mute the microphone
-    // function muteMicrophone() {
-    //     localStream.getTracks().forEach(track => track.enabled = false);
-    // }
-
-    // // Unmute the microphone
-    // function unmuteMicrophone() {
-    //     localStream.getTracks().forEach(track => track.enabled = true);
-    // }
-
     
 
     // Global recognition instance
@@ -252,6 +335,7 @@
     // Ensure recognition restarts only after TTS playback
     var audioPlayer = document.getElementById("audio-player");
     audioPlayer.onended = function() {
+        animateMouth(0);  // Ensure mouth fully closes
         startListening();  // Resume listening after TTS finishes
 
         // 🎤 Restart microphone stream
@@ -311,6 +395,11 @@
                 // audioPlayer.muted = true;  // Mute if you only need text feedback
 
                 audioPlayer.play();
+                syncMouthWithAudio(); // Start syncing mouth when audio plays
+
+                audioPlayer.onended = function() {
+                    startListening();
+                }
             }
         });
 
@@ -329,7 +418,12 @@
         }
     });
 
-    makeOffer();  // Start the WebRTC handshake
+
+    init3DAvatar();
+    animate();
+
+
+
 </script>
 
 

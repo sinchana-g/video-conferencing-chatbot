@@ -4,6 +4,7 @@ from flask_cors import CORS
 import openai
 import os
 from dotenv import load_dotenv
+import eventlet
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,7 +15,9 @@ client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # print(f"OpenAI API Key: {os.getenv('OPENAI_API_KEY')}")
 app = Flask(__name__)
-CORS(app, origins="http://127.0.0.1:5000")
+# socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins=["http://localhost:5000", "http://127.0.0.1:5000"], async_mode='eventlet')
+CORS(app, origins=["http://127.0.0.1:5000", "http://localhost:5000"])
 
 conversation_history = []
 
@@ -59,8 +62,7 @@ def generate_speech(text):
 
     return audio_path
 
-app = Flask(__name__)
-socketio = SocketIO(app)
+
 
 @app.route('/')
 def index():
@@ -101,6 +103,7 @@ def handle_ice_candidate(data):
 
 if __name__ == "__main__":
     os.makedirs("static/audio", exist_ok=True)  # Ensure the audio directory exists
-    app.run(debug=True)
-    # socketio.run(app, debug=True, port=5000)
+    # app.run(debug=True)
+    # socketio.run(app, debug=True)
+    socketio.run(app, host='127.0.0.1', port=5000)
 
