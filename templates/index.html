@@ -143,6 +143,9 @@
         </div>
     </div>
 
+    <div id="emotion-display" style="text-align:center; font-size:20px; margin-top:10px;"></div>
+
+
     <audio id="audio-player" controls style="display:none;"></audio>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.js"></script>
@@ -170,13 +173,18 @@
         renderer = new THREE.WebGLRenderer();
 
 
-        scene.background = new THREE.Color(0xFFB6C1);
+        // scene.background = new THREE.Color(0xFFB6C1);
+
+        // Set a custom background image for the scene
+        const texture_loader = new THREE.TextureLoader();
+        const texture = texture_loader.load('static/background3.jpg'); // Your background image path
+        scene.background = texture;
 
         // Position the camera closer to the face
         camera.position.set(0, 1.7, 2); // Adjust the z-value to zoom in closer to the face
 
         // Optional: Adjust FOV to make it feel more zoomed in
-        camera.fov = 7; // Lower value zooms in, higher value zooms out
+        camera.fov = 8; // Lower value zooms in, higher value zooms out
         camera.updateProjectionMatrix(); // Update projection matrix after changing FOV
         
         const avatarContainer = document.getElementById('three-d-avatar-container');
@@ -301,6 +309,46 @@
 
     // Start webcam
     startWebcam();
+
+    async function captureFrame() {
+        const videoElement = document.getElementById('candidate-video');
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Draw the current frame from the video element to the canvas
+        context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        
+        // Convert the canvas image to base64
+        const imageData = canvas.toDataURL('image/jpeg');
+        
+        // Send the base64 image to the backend for emotion analysis
+        $.ajax({
+            url: '/analyze_emotion',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ image: imageData }),
+            success: function(response) {
+                // Display detected emotion on the page
+                const emotionDisplay = document.getElementById('emotion-display');
+                emotionDisplay.innerHTML = `Detected Emotion: ${response.emotion}`;
+            },
+            error: function(err) {
+                console.log('Error analyzing emotion:', err);
+            }
+        });
+    }
+
+    // Capture frames every 500ms (adjust as needed)
+    setInterval(captureFrame, 500);
+
+
+    function updateEmotionDisplay(emotion) {
+        console.log("Emotion received:", emotion);
+        const emotionText = document.getElementById("emotion-display");
+        emotionText.innerText = `Emotion: ${emotion}`;
+    }
+
+
     
 
     // Global recognition instance
