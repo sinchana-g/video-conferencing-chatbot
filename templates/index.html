@@ -124,9 +124,32 @@
         color: #888;
         font-style: italic;
     }
+
+    /* Job info display */
+    .job-info-container {
+        margin-top: 20px;
+        background-color: #fff;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        width: 80%;
+    }
+
+    .loading-indicator {
+        font-size: 14px;
+        color: #888;
+        font-style: italic;
+    }
 </style>
 </head>
 <body>
+    <!-- Section to display Job Title and Description -->
+    <div class="job-info-container">
+        <h2 id="job-title">Job Title: Loading...</h2>
+        <p id="job-description">Job Description: Loading...</p>
+    </div>
+
     <!-- Video container for candidate and interviewer -->
     <div class="video-container">
         <div id="three-d-avatar-container"></div>
@@ -142,9 +165,6 @@
             <button onclick="sendMessage()">Send</button>
         </div>
     </div>
-
-    <div id="emotion-display" style="text-align:center; font-size:20px; margin-top:10px;"></div>
-
 
     <audio id="audio-player" controls style="display:none;"></audio>
 
@@ -172,13 +192,16 @@
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer();
 
-
-        // scene.background = new THREE.Color(0xFFB6C1);
-
-        // Set a custom background image for the scene
+        // Load the background image immediately
         const texture_loader = new THREE.TextureLoader();
-        const texture = texture_loader.load('static/background3.jpg'); // Your background image path
-        scene.background = texture;
+        texture_loader.load('static/background3.jpg', function(texture) {
+            console.log("Background texture loaded")
+            scene.background = texture;
+            renderer.render(scene, camera);
+
+        }, undefined, function (error) {
+            console.error("Error loading background:", error);
+        });
 
         // Position the camera closer to the face
         camera.position.set(0, 1.7, 2); // Adjust the z-value to zoom in closer to the face
@@ -309,46 +332,6 @@
 
     // Start webcam
     startWebcam();
-
-    async function captureFrame() {
-        const videoElement = document.getElementById('candidate-video');
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        
-        // Draw the current frame from the video element to the canvas
-        context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        
-        // Convert the canvas image to base64
-        const imageData = canvas.toDataURL('image/jpeg');
-        
-        // Send the base64 image to the backend for emotion analysis
-        $.ajax({
-            url: '/analyze_emotion',
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({ image: imageData }),
-            success: function(response) {
-                // Display detected emotion on the page
-                const emotionDisplay = document.getElementById('emotion-display');
-                emotionDisplay.innerHTML = `Detected Emotion: ${response.emotion}`;
-            },
-            error: function(err) {
-                console.log('Error analyzing emotion:', err);
-            }
-        });
-    }
-
-    // Capture frames every 500ms (adjust as needed)
-    setInterval(captureFrame, 500);
-
-
-    function updateEmotionDisplay(emotion) {
-        console.log("Emotion received:", emotion);
-        const emotionText = document.getElementById("emotion-display");
-        emotionText.innerText = `Emotion: ${emotion}`;
-    }
-
-
     
 
     // Global recognition instance
@@ -407,7 +390,32 @@
 
 
 
-    // Modify sendMessage to stop recognition before TTS
+    function updateJobInfo(title, description) {
+        document.getElementById("job-title").innerText = `Job Title: ${title}`;
+        document.getElementById("job-description").innerHTML = `
+            <strong>Job Description:</strong>
+            <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-family: inherit;"> 
+            ${description}`;
+    }
+
+    // Fetch job description on page load
+    function fetchJobDescription() {
+        $.ajax({
+            type: "GET",
+            url: "/get_job_description", // URL where the job info is fetched
+            success: function(response) {
+                updateJobInfo(response.job_title, response.job_description);
+                // document.querySelector(".loading-indicator").style.display = "none"; // Hide loading indicator
+            },
+            error: function(error) {
+                console.error("Error fetching job description:", error);
+                document.querySelector(".loading-indicator").innerText = "Failed to load job info.";
+            }
+        });
+    }
+
+
+    
     function sendMessage() {
         var userInput = $("#user-input").val().trim();
         if (userInput === "") return;
@@ -425,6 +433,11 @@
                 $("#chat-box").append(`<div class="message bot-message">${response.response}</div>`);
                 $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
 
+                // If job description is needed, update it
+                if (response.job_title && response.job_description) {
+                    updateJobInfo(response.job_title, response.job_description);
+                }
+
                 var audioPlayer = document.getElementById("audio-player");
 
                 // Stop recognition before playing TTS
@@ -440,7 +453,7 @@
                 audioPlayer.src = response.audio + "?t=" + new Date().getTime();
                 audioPlayer.style.display = "block";
                 audioPlayer.volume = 0.5;  // Reduce volume slightly
-                // audioPlayer.muted = true;  // Mute if you only need text feedback
+                // audioPlayer.muted = true;  // Mute if only text feedback is needed
 
                 audioPlayer.play();
                 syncMouthWithAudio(); // Start syncing mouth when audio plays
@@ -466,11 +479,12 @@
         }
     });
 
+    init3DAvatar();    // Your existing 3D avatar init
+    animate();         // Start rendering the avatar
 
-    init3DAvatar();
-    animate();
+    window.onload = fetchJobDescription(); // <== async call AFTER page loads
 
-
+    
 
 </script>
 

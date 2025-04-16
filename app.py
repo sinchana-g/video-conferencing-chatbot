@@ -5,16 +5,7 @@ import openai
 import os
 from dotenv import load_dotenv
 import eventlet
-import base64
-import cv2
-import numpy as np
-from keras.models import load_model
-from keras.layers import Input, Dense, Dropout, Flatten
-from keras.models import Model, Sequential
-from keras.layers import Conv2D
-from keras.layers import MaxPooling2D
-from fer import FER
-# from moviepy.editor import *
+import re
 
 # Load environment variables from .env file
 load_dotenv()
@@ -29,36 +20,50 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins=["http://localhost:5000", "http://127.0.0.1:5000"], async_mode='eventlet')
 CORS(app, origins=["http://127.0.0.1:5000", "http://localhost:5000"])
 
+
+current_job_title = "AI/ML Engineer"
 conversation_history = []
 
-# # Load the pre-trained emotion model (FER-2013 model)
-# input_tensor = Input(shape=(48, 48, 1))
-# try:
-#     emotion_model = load_model('static/models/model.h5', custom_objects={'input_tensor': input_tensor})
-#     print("Model loaded successfully")
-# except Exception as e:
-#     print(f"Error loading model: {e}")
+
+def generate_job_description(job_title):
+    prompt = f"""
+    Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
+    """
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500,
+        temperature=0.7
+    )
+    raw = response.choices[0].message.content.strip()
+    cleaned = re.sub(r"(?i)(Job Title:.*\n?)|(Job Description:.*\n?)", "", raw).strip()
+
+    return cleaned
 
 
-# # Load OpenCV's pre-trained face detector (Haar Cascade)
-# face_cascade = cv2.CascadeClassifier('static/models/haarcascade_frontalface_default.xml')
 
-
-def chatbot_response_with_history(user_input):
+def chatbot_response_with_history(user_input, job_description=None):
     conversation_history.append({"role": "user", "content": user_input})
 
+    if job_description is None:
+        job_description = "the role the user is applying for."
+
     # Generate the interview-specific system prompt
-    system_prompt = """
-    You are an AI interviewer conducting a job interview. Ask the user one relevant question at a time based on their role and experience. 
-    After each question, wait for their response and then ask a follow-up question. 
+    prompt = f"""
+    You are an AI interviewer conducting a job interview based on this job description:
+
+    {job_description}
+
+    Ask one relevant question at a time based on the user's role, experience, and the job description. 
+    After each question, wait for their response and then ask a follow-up. 
     Keep your questions professional, and focus on the job position. 
     Do not list multiple questions at once.
-    """
+    """ 
     
     response = client.chat.completions.create(
         model="gpt-4", 
         messages=[
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": user_input},
         ],
         max_tokens=150,  # Adjust for longer/shorter responses
@@ -68,6 +73,7 @@ def chatbot_response_with_history(user_input):
     conversation_history.append({"role": "assistant", "content": bot_reply})  # Save bot response
 
     return bot_reply
+
 
     
 def generate_speech(text):
@@ -90,63 +96,26 @@ def generate_speech(text):
 def index():
     return render_template('index.html')
 
-@app.route("/analyze_emotion", methods=["POST"])
-def analyze_emotion():
-    try:
-        # Decode base64 image
-        data = request.json["image"]
-        img = cv2.imdecode(np.frombuffer(base64.b64decode(data.split(",")[1]), np.uint8), cv2.IMREAD_COLOR)
-
-        # Initialize FER detector
-        emotions = FER().detect_emotions(img)
-
-        # Find the best emotion with the highest score
-        best_emotion = max(
-            (max(face['emotions'], key=face['emotions'].get) for face in emotions), 
-            key=lambda e: next(face['emotions'][e] for face in emotions if e in face['emotions']),
-            default="unknown"
-        )
-
-        return jsonify({"emotion": best_emotion})
-
-    except Exception as e:
-        print("Emotion detection error:", str(e))
-        return jsonify({"emotion": "unknown"})
-
-
-# from deepface import DeepFace
-
-# @app.route("/analyze_emotion", methods=["POST"])
-# def analyze_emotion():
-#     try:
-#         # Decode base64 image
-#         data = request.json["image"]
-#         img = cv2.imdecode(np.frombuffer(base64.b64decode(data.split(",")[1]), np.uint8), cv2.IMREAD_COLOR)
-
-#         # Use DeepFace for emotion analysis
-#         analysis = DeepFace.analyze(img, actions=['emotion'])
-
-#         best_emotion = max(analysis[0]['emotion'], key=analysis[0]['emotion'].get)
-#         return jsonify({"emotion": best_emotion})
-    
-#     except Exception as e:
-#         print("Emotion detection error:", str(e))
-#         return jsonify({"emotion": "unknown"})
-
-
-
-
 @app.route('/ask', methods=['POST'])
 def ask():
     user_input = request.form['user_input']
     
-    # Process the user input and generate a bot response (similar to your previous logic)
-    bot_response = chatbot_response_with_history(user_input)
+    # Process the user input and generate a bot response
+    bot_response = chatbot_response_with_history(user_input, current_job_description)
     audio_url = generate_speech(bot_response)  # Generate the speech file and get the URL
     
     return jsonify({
         'response': bot_response,
-        'audio': audio_url
+        'audio': audio_url,
+    })
+
+@app.route('/get_job_description', methods=['GET'])
+def get_job_description():
+    global current_job_description 
+    current_job_description = generate_job_description(current_job_title)
+    return jsonify({
+        'job_title': current_job_title,
+        'job_description': current_job_description
     })
 
 # WebRTC signaling routes using Flask-SocketIO
@@ -174,4 +143,3 @@ if __name__ == "__main__":
     # app.run(debug=True)
     # socketio.run(app, debug=True)
     socketio.run(app, host='127.0.0.1', port=5000)
-
