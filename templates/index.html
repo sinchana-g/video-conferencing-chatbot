@@ -177,7 +177,12 @@
 
     <script>
     // Initialize Socket.io
-    const socket = io.connect("http://127.0.0.1:5000");
+    // const socket = io.connect("http://0.0.0.0:8080");
+        
+    // Dynamically get the current protocol (http or https) and host
+    const baseURL = window.location.protocol + "//" + window.location.host;
+    const socket = io.connect(baseURL);
+
 
     let localPeerConnection;
     let remotePeerConnection;
@@ -195,7 +200,6 @@
         // Load the background image immediately
         const texture_loader = new THREE.TextureLoader();
         texture_loader.load('static/background3.jpg', function(texture) {
-            console.log("Background texture loaded")
             scene.background = texture;
             renderer.render(scene, camera);
 
@@ -226,7 +230,7 @@
 
         // Load the GLB avatar model using THREE.GLTFLoader
         const loader = new THREE.GLTFLoader();
-        loader.load('http://127.0.0.1:5000/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
+        loader.load(baseURL+'/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
             avatar = gltf.scene;
             avatar.scale.set(1, 1, 1);  // Adjust the avatar scale
             avatar.position.set(0, 0, 0);  // Position the avatar in the scene
@@ -236,9 +240,9 @@
                 if (child.name.toLowerCase().includes("head")) {
                     head = child;  // Assign head if found
                 }
-                if (child.isMesh && child.morphTargetDictionary) {
-                    console.log(child.name, child.morphTargetDictionary);
-                }
+                // if (child.isMesh && child.morphTargetDictionary) {
+                //     console.log(child.name, child.morphTargetDictionary);
+                // }
             });
 
         }, undefined, function (error) {
@@ -426,7 +430,7 @@
 
         $.ajax({
             type: "POST",
-            url: "/ask",
+            url: "/ask_scenario",
             data: { user_input: userInput },
             success: function(response) {
                 $(".loading").remove();
