@@ -6,23 +6,33 @@ import os
 from dotenv import load_dotenv
 import eventlet
 import re
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import normalize
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Now you can access the OpenAI API key like this:
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-
-# print(f"OpenAI API Key: {os.getenv('OPENAI_API_KEY')}")
 app = Flask(__name__)
-# socketio = SocketIO(app)
-socketio = SocketIO(app, cors_allowed_origins=["http://localhost:5000", "http://127.0.0.1:5000"], async_mode='eventlet')
-CORS(app, origins=["http://127.0.0.1:5000", "http://localhost:5000"])
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+CORS(app, origins="*")
 
+scenarios_df = pd.read_excel("Cleaned_Scenarios_by_Skill.xlsx")
+scenarios_df.columns = scenarios_df.columns.str.strip()
+unique_skills = scenarios_df["Skill Name"].dropna().unique().tolist()
+skill_embeddings = client.embeddings.create(
+    model="text-embedding-ada-002",
+    input=unique_skills
+).data
+skill_embedding_matrix = normalize(np.array([e.embedding for e in skill_embeddings]))
 
-current_job_title = "AI/ML Engineer"
+current_job_title = "Construction Worker"
 conversation_history = []
+scenario_history = []
 
 
 def generate_job_description(job_title):
@@ -39,6 +49,98 @@ def generate_job_description(job_title):
     cleaned = re.sub(r"(?i)(Job Title:.*\n?)|(Job Description:.*\n?)", "", raw).strip()
 
     return cleaned
+
+
+def extract_skills_from_jd(jd_text):
+    prompt = f"""Extract the top 5 most relevant soft/behavioral skills from this job description:
+    
+    {jd_text}
+    
+    List them one per line concise phrases (2–3 words max). 
+    For example: Communication, Teamwork, Problem Solving, Adaptability, Leadership."""
+    
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+        max_tokens=150
+    )
+    return [line.strip() for line in response.choices[0].message.content.split("\n") if line.strip()]
+
+
+def find_top_matching_skills(jd_skills, top_n=2):
+    # Embed the job description skills
+    response = client.embeddings.create(model="text-embedding-ada-002", input=jd_skills)
+    jd_embeddings = normalize(np.array([e.embedding for e in response.data]))
+
+    # Calculate cosine similarities with the skill embedding matrix for each job description skill
+    skill_similarities = cosine_similarity(jd_embeddings, skill_embedding_matrix)
+    
+    # Sum up the cosine similarities for each job description skill
+    avg_similarities = skill_similarities.mean(axis=0)
+    
+    # Get top N indices based on the similarity score
+    top_indices = np.argsort(avg_similarities)[::-1]
+    
+    # Extract the top skills (with duplicates initially allowed)
+    top_skills = [unique_skills[i] for i in top_indices]
+    
+    # Normalize skill matching (lowercase and strip spaces)
+    normalized_skills = [skill.strip().lower() for skill in top_skills]
+    
+    # Remove duplicates by converting the list to a set and back to a list
+    unique_normalized_skills = list(dict.fromkeys(normalized_skills))  # This preserves order
+    
+    # Map the normalized skills back to the original names
+    unique_top_skills = [unique_skills[normalized_skills.index(skill)] for skill in unique_normalized_skills]
+    
+    # Return the top N unique skills
+    return unique_top_skills[:top_n]
+
+
+
+def get_scenarios(job_description):
+    jd_skills = extract_skills_from_jd(job_description)
+    matching_skills = find_top_matching_skills(jd_skills)
+    print('jd_skills:', jd_skills, flush=True)
+    print('matching_skills:', matching_skills, flush=True)
+    
+    # Get scenarios matching those skills
+    scenarios = []
+    for skill in matching_skills:
+        matched = scenarios_df[scenarios_df["Skill Name"] == skill]["Scenarios"].dropna().tolist()
+        for scenario in matched:
+            scenarios.append((skill, scenario))
+    return scenarios
+
+
+def scenario_chatbot_response(user_input, job_title, job_description, scenario_text):
+    scenario_history.append({"role": "user", "content": user_input})
+    
+    prompt = f"""You are an AI interviewer conducting a scenario-based behavioral interview.
+    
+    Job Title: {job_title}
+    Job Description: {job_description}
+    Scenario (to be tailored to the job): {scenario_text}
+    
+    Ask one question at a time based on the candidate's responses. 
+    Each follow-up should dig deeper into their reasoning or experience. 
+    Use the job context above to make the scenario and follow-ups more relevant.
+    Do not ask multiple questions at once. 
+    Keep it professional and focused."""
+    
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt},
+                 {"role": "user", "content": user_input}],
+        temperature=0.7,
+        max_tokens=200
+    )
+    
+    bot_reply = response.choices[0].message.content.strip()
+    scenario_history.append({"role": "assistant", "content": bot_reply})
+    
+    return bot_reply
 
 
 
@@ -74,7 +176,6 @@ def chatbot_response_with_history(user_input, job_description=None):
 
     return bot_reply
 
-
     
 def generate_speech(text):
     """Convert text response to speech using OpenAI TTS."""
@@ -96,6 +197,17 @@ def generate_speech(text):
 def index():
     return render_template('index.html')
 
+@app.route('/get_job_description', methods=['GET'])
+def get_job_description():
+    global current_job_description 
+    current_job_description = generate_job_description(current_job_title)
+    global current_scenario_text
+    current_scenario_text = get_scenarios(current_job_description)
+    return jsonify({
+        'job_title': current_job_title,
+        'job_description': current_job_description
+    })
+
 @app.route('/ask', methods=['POST'])
 def ask():
     user_input = request.form['user_input']
@@ -109,14 +221,21 @@ def ask():
         'audio': audio_url,
     })
 
-@app.route('/get_job_description', methods=['GET'])
-def get_job_description():
-    global current_job_description 
-    current_job_description = generate_job_description(current_job_title)
+@app.route('/ask_scenario', methods=['POST'])
+def ask_scenario():
+    user_input = request.form['user_input']
+    # scenario_text = get_scenarios(current_job_description)
+    # print(scenario_text)
+
+    # Process the user input and generate a scenario-based response
+    bot_response = scenario_chatbot_response(user_input, current_job_title, current_job_description, current_scenario_text)
+    audio_url = generate_speech(bot_response)  # Reuse existing TTS function
+
     return jsonify({
-        'job_title': current_job_title,
-        'job_description': current_job_description
+        'response': bot_response,
+        'audio': audio_url,
     })
+
 
 # WebRTC signaling routes using Flask-SocketIO
 
@@ -139,7 +258,8 @@ def handle_ice_candidate(data):
     emit('ice-candidate', data, broadcast=True)
 
 if __name__ == "__main__":
-    os.makedirs("static/audio", exist_ok=True)  # Ensure the audio directory exists
-    # app.run(debug=True)
-    # socketio.run(app, debug=True)
-    socketio.run(app, host='127.0.0.1', port=5000)
+    port = int(os.getenv("PORT", 8080))
+    os.makedirs("static/audio", exist_ok=True)
+    # socketio.run(app, host='127.0.0.1', port=5000)
+    socketio.run(app, host='0.0.0.0', port=port, debug=True)
+
