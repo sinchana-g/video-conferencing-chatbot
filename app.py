@@ -30,7 +30,10 @@ skill_embeddings = client.embeddings.create(
 ).data
 skill_embedding_matrix = normalize(np.array([e.embedding for e in skill_embeddings]))
 
-current_job_title = "Construction Worker"
+scenario_index = 0
+follow_up_count = 0
+
+current_job_title = "AI Engineer"
 conversation_history = []
 scenario_history = []
 
@@ -114,20 +117,32 @@ def get_scenarios(job_description):
     return scenarios
 
 
-def scenario_chatbot_response(user_input, job_title, job_description, scenario_text):
+def scenario_chatbot_response(user_input, job_title, job_description, scenario_text, follow_up_count):
     scenario_history.append({"role": "user", "content": user_input})
     
-    prompt = f"""You are an AI interviewer conducting a scenario-based behavioral interview.
+    closing = (
+        "- This is the final follow-up question for the scenario. Close it out with a summary statement afterward."
+        if follow_up_count == 1 else
+        "- Ask one follow-up question."
+    )
+
     
-    Job Title: {job_title}
-    Job Description: {job_description}
-    Scenario (to be tailored to the job): {scenario_text}
-    
-    Ask one question at a time based on the candidate's responses. 
-    Each follow-up should dig deeper into their reasoning or experience. 
-    Use the job context above to make the scenario and follow-ups more relevant.
-    Do not ask multiple questions at once. 
-    Keep it professional and focused."""
+    prompt = f"""You are an AI interviewer conducting a scenario-based behavioral interview for a candidate applying for the role of **{job_title}**.
+
+    Job Description:
+    {job_description}
+
+    Scenario:
+    {scenario_text}
+
+    Instructions:
+    - Use the job title and job description to make this scenario and the follow-up questions as relevant as possible to the role.
+    - Ask **one** follow-up question at a time, digging deeper into the candidate's reasoning, actions, or impact.
+    - You have asked {follow_up_count} follow-ups so far.
+    {closing}
+    - Do **not** ask multiple questions at once.
+    - Keep it professional, concise, and focused on relevant skills and behaviors."""
+
     
     response = client.chat.completions.create(
         model="gpt-4",
@@ -201,8 +216,8 @@ def index():
 def get_job_description():
     global current_job_description 
     current_job_description = generate_job_description(current_job_title)
-    global current_scenario_text
-    current_scenario_text = get_scenarios(current_job_description)
+    global scenario_list
+    scenario_list = get_scenarios(current_job_description)
     return jsonify({
         'job_title': current_job_title,
         'job_description': current_job_description
@@ -223,12 +238,33 @@ def ask():
 
 @app.route('/ask_scenario', methods=['POST'])
 def ask_scenario():
+    global scenario_index, follow_up_count
+    
     user_input = request.form['user_input']
-    # scenario_text = get_scenarios(current_job_description)
-    # print(scenario_text)
+    
+    # If done with all scenarios
+    if scenario_index >= len(scenario_list):
+        return jsonify({
+            'response': "Thank you, that concludes the interview.",
+            'audio': generate_speech("Thank you, that concludes the interview.")
+        })
 
-    # Process the user input and generate a scenario-based response
-    bot_response = scenario_chatbot_response(user_input, current_job_title, current_job_description, current_scenario_text)
+    current_scenario_text = scenario_list[scenario_index][1]
+
+    bot_response = scenario_chatbot_response(
+        user_input,
+        current_job_title,
+        current_job_description,
+        current_scenario_text,
+        follow_up_count
+    )
+    
+    # Update follow-up count and scenario index
+    follow_up_count += 1
+    if follow_up_count >= 2:
+        follow_up_count = 0
+        scenario_index += 1
+
     audio_url = generate_speech(bot_response)  # Reuse existing TTS function
 
     return jsonify({
