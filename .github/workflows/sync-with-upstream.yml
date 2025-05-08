@@ -22,7 +22,7 @@ jobs:
 
       - name: Add upstream with auth and fetch
         env:
-          TOKEN: ${{ secrets.UPSTREAM_PAT }}
+          TOKEN: ${{ secrets.DEVELOPER_PAT }}
         run: |
           git remote add upstream https://x-access-token:${TOKEN}@github.com/sinchana-g/video-conferencing-chatbot.git
           git fetch upstream
