@@ -1,4 +1,4 @@
-name: Trigger Sync to My Repo on Push
+name: Sync to Gopalkrishna-Daisy repo on push
 
 on:
   push:
@@ -8,14 +8,16 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout source code
+      uses: actions/checkout@v3
       with:
         fetch-depth: 0
 
-    - name: Push to my repo
+    - name: Push to target repo
       run: |
-        git config --global user.email "you@example.com"
-        git config --global user.name "Your Name"
-        git remote add myrepo https://x-access-token:${{ secrets.YOUR_REPO_PAT }}@github.com/Gopalkrishna-Daisy/video-conferencing-chatbot.git
-        git push myrepo main --force
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git remote add target https://x-access-token:${{ secrets.SYNC_PAT }}@github.com/Gopalkrishna-Daisy/video-conferencing-chatbot.git
+        git push target main --force
