@@ -27,10 +27,9 @@ jobs:
           git remote add upstream https://x-access-token:${TOKEN}@github.com/sinchana-g/video-conferencing-chatbot.git
           git fetch upstream
 
-      - name: Merge and push to main
+      - name: Push only if there are changes
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          git checkout main
-          git merge upstream/main --allow-unrelated-histories -m "Auto-merge from upstream"
-          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} main
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/$GITHUB_REPOSITORY.git
+          git diff --quiet && echo "✅ No changes to push" || git push origin main
