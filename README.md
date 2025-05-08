@@ -16,18 +16,19 @@ Before running the application, make sure you have the following installed on yo
 
 First, create a virtual environment and install the required dependencies.
 
-    ```bash
-    # Create a virtual environment
-    python -m venv venv
+```bash
+# Create a virtual environment
+python -m venv venv
 
-    # Activate the virtual environment
-    # On Windows
-    venv\Scripts\activate
-    # On macOS/Linux
-    source venv/bin/activate
+# Activate the virtual environment
+# On Windows
+venv\Scripts\activate
+# On macOS/Linux
+source venv/bin/activate
 
-    # Install the dependencies from requirements.txt
-    pip install -r requirements.txt
+# Install the dependencies from requirements.txt
+pip install -r requirements.txt
+```
     
 
 ### 2. Set Up OpenAI API Key
@@ -39,6 +40,7 @@ The application requires an OpenAI API key for generating job descriptions and i
 
    ```bash
    OPENAI_API_KEY=your-openai-api-key-here
+   ```
 
 Make sure to replace your-openai-api-key-here with your actual OpenAI API key.
 
@@ -46,11 +48,11 @@ Make sure to replace your-openai-api-key-here with your actual OpenAI API key.
 
 To run the Flask app locally, use the following command:
 
-    ```bash
-    # Run the Flask app
-    python app.py
+```bash
+# Run the Flask app
+python app.py
+```
 
-   
 The application will be available at http://127.0.0.1:5000/.
 
 
@@ -58,10 +60,11 @@ The application will be available at http://127.0.0.1:5000/.
 
 If you prefer to run the application inside a Docker container, you can create a Docker image, build the Docker image and Run the Docker container. 
 
-    ```bash
-    docker build -t video-conferencing-chatbot .
-    docker run -p 8080:8080 video-conferencing-chatbot
-    
+```bash
+docker build -t video-conferencing-chatbot .
+docker run -p 8080:8080 video-conferencing-chatbot
+```
+
     
 The application will be available at http://localhost:8080/.
 
