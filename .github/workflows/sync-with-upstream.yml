@@ -2,36 +2,35 @@ name: Sync with Upstream
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
-  workflow_dispatch:      # Allows manual trigger
+    - cron: '0 * * * *'  # every hour
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout my repo
+      - name: Checkout target repo (your fork)
         uses: actions/checkout@v3
         with:
           persist-credentials: false
 
-      - name: Configure Git
+      - name: Set up Git identity
         run: |
           git config user.name "Gopalkrishna-Daisy"
           git config user.email "gopal@daisyintel.com"
 
-      - name: Add upstream and fetch
+      - name: Add upstream with auth and fetch
+        env:
+          TOKEN: ${{ secrets.DEVELOPER_PAT }}
         run: |
-          git remote add upstream https://github.com/sinchana-g/video-conferencing-chatbot.git
+          git remote add upstream https://x-access-token:${TOKEN}@github.com/sinchana-g/video-conferencing-chatbot.git
           git fetch upstream
 
-      - name: Merge upstream into main
-        run: |
-          git checkout main
-          git merge upstream/main --allow-unrelated-histories -m "Automated sync from upstream"
-
-      - name: Push changes to origin
+      - name: Merge and push to main
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
+          git checkout main
+          git merge upstream/main --allow-unrelated-histories -m "Auto-merge from upstream"
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} main
