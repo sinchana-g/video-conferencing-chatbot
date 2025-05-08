@@ -29,7 +29,8 @@ jobs:
 
       - name: Merge and push to main
         env:
-          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          #TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          TOKEN: "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"
         run: |
           git checkout main
           git merge upstream/main --allow-unrelated-histories -m "Auto-merge from upstream"
