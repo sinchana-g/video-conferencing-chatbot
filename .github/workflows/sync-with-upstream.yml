@@ -1,0 +1,37 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:      # Allows manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout my repo
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: Configure Git
+        run: |
+          git config user.name "Your Name"
+          git config user.email "your.email@example.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/sinchana-g/video-conferencing-chatbot.git
+          git fetch upstream
+
+      - name: Merge upstream into main
+        run: |
+          git checkout main
+          git merge upstream/main --allow-unrelated-histories -m "Automated sync from upstream"
+
+      - name: Push changes to origin
+        env:
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} main
