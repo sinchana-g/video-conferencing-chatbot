@@ -17,8 +17,8 @@ jobs:
 
       - name: Configure Git
         run: |
-          git config user.name "Your Name"
-          git config user.email "your.email@example.com"
+          git config user.name "Gopalkrishna-Daisy"
+          git config user.email "gopal@daisyintel.com"
 
       - name: Add upstream and fetch
         run: |
