@@ -15,6 +15,9 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Check remotes
+      run: git remote -v
+
     - name: Push to target repo
       run: |
         git config --global user.name "GitHub Actions"
