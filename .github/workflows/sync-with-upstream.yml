@@ -2,8 +2,8 @@ name: Sync with Upstream
 
 on:
   schedule:
-    - cron: '0 * * * *'  # every hour
-  workflow_dispatch:
+    - cron: '*/5 * * * *'   # Every 5 minutes
+  workflow_dispatch:        # Allows manual trigger
 
 jobs:
   sync:
@@ -17,8 +17,8 @@ jobs:
 
       - name: Set up Git identity
         run: |
-          git config user.name "Gopalkrishna-Daisy"
-          git config user.email "gopal@daisyintel.com"
+          git config --global user.name "Gopalkrishna-Daisy"
+          git config --global user.email "gopal@daisyintel.com"
 
       - name: Add upstream with auth and fetch
         env:
