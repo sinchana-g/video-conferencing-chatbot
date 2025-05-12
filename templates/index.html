@@ -168,6 +168,7 @@
             <div id="score-display" style="display: none; font-weight: bold; margin-right: 15px; white-space: nowrap;">Score: 0</div>
             <div id="three-d-avatar-container"></div>
         </div>
+        <div id="three-d-avatar-container"></div>
         <video id="candidate-video" autoplay playsinline></video>
     </div>
 
@@ -443,7 +444,6 @@
         $("#chat-box").append(`<div class="message bot-message loading">Typing...</div>`);
         $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
 
-        
         $.ajax({
             type: "POST",
             url: "/ask_scenario",

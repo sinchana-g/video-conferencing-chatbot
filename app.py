@@ -32,6 +32,7 @@ skill_embedding_matrix = normalize(np.array([e.embedding for e in skill_embeddin
 
 scenario_index = 0
 follow_up_count = 0
+<<<<<<< HEAD
 scenario_scores = []
 follow_up_question = ""
 
@@ -160,6 +161,7 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     return bot_reply
 
 
+<<<<<<< HEAD
 def score_answer(scenario_text, follow_up_question, user_answer):
     scoring_prompt = f"""
     You are an AI interviewer. Evaluate the candidate's response to a scenario-based question.
@@ -188,7 +190,6 @@ def score_answer(scenario_text, follow_up_question, user_answer):
         return int(re.search(r'\d', score_text).group())
     except:
         return 0
-
 
 
 def chatbot_response_with_history(user_input, job_description=None):
@@ -293,6 +294,13 @@ def ask_scenario():
         scenario_scores.append(score)
     
     # Generate the bot response
+        return jsonify({
+            'response': "Thank you, that concludes the interview.",
+            'audio': generate_speech("Thank you, that concludes the interview.")
+        })
+
+    current_scenario_text = scenario_list[scenario_index][1]
+
     bot_response = scenario_chatbot_response(
         user_input,
         current_job_title,
@@ -315,8 +323,7 @@ def ask_scenario():
     return jsonify({
         'response': bot_response,
         'audio': audio_url,
-        'score': score
-    })
+        'score': score })
 
 
 # WebRTC signaling routes using Flask-SocketIO
