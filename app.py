@@ -32,6 +32,8 @@ skill_embedding_matrix = normalize(np.array([e.embedding for e in skill_embeddin
 
 scenario_index = 0
 follow_up_count = 0
+scenario_scores = []
+follow_up_question = ""
 
 current_job_title = "AI Engineer"
 conversation_history = []
@@ -158,6 +160,36 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     return bot_reply
 
 
+def score_answer(scenario_text, follow_up_question, user_answer):
+    scoring_prompt = f"""
+    You are an AI interviewer. Evaluate the candidate's response to a scenario-based question.
+
+    Scenario: {scenario_text}
+    Interviewer Follow-Up: {follow_up_question}
+    Candidate Response: {user_answer}
+
+    Score the response from 0 to 2:
+    - 0 = Inadequate or irrelevant
+    - 1 = Somewhat relevant or incomplete
+    - 2 = Strong and relevant
+
+    Respond with a single integer (0, 1, or 2).
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": scoring_prompt}],
+        temperature=0,
+        max_tokens=5
+    )
+
+    score_text = response.choices[0].message.content.strip()
+    try:
+        return int(re.search(r'\d', score_text).group())
+    except:
+        return 0
+
+
 
 def chatbot_response_with_history(user_input, job_description=None):
     conversation_history.append({"role": "user", "content": user_input})
@@ -238,19 +270,29 @@ def ask():
 
 @app.route('/ask_scenario', methods=['POST'])
 def ask_scenario():
-    global scenario_index, follow_up_count
+    global scenario_index, follow_up_count, follow_up_question
     
     user_input = request.form['user_input']
     
     # If done with all scenarios
     if scenario_index >= len(scenario_list):
+        average_score = sum(scenario_scores) / len(scenario_scores)
+        
         return jsonify({
             'response': "Thank you, that concludes the interview.",
-            'audio': generate_speech("Thank you, that concludes the interview.")
+            'audio': generate_speech("Thank you, that concludes the interview."),
+            'average_score': average_score
         })
 
     current_scenario_text = scenario_list[scenario_index][1]
-
+    
+    score = 0
+    # Score the previous answer using the stored follow-up question
+    if follow_up_question:
+        score = score_answer(current_scenario_text, follow_up_question, user_input)
+        scenario_scores.append(score)
+    
+    # Generate the bot response
     bot_response = scenario_chatbot_response(
         user_input,
         current_job_title,
@@ -259,6 +301,9 @@ def ask_scenario():
         follow_up_count
     )
     
+    # Save the follow-up question for scoring next time
+    follow_up_question = bot_response
+
     # Update follow-up count and scenario index
     follow_up_count += 1
     if follow_up_count >= 2:
@@ -270,6 +315,7 @@ def ask_scenario():
     return jsonify({
         'response': bot_response,
         'audio': audio_url,
+        'score': score
     })
 
 

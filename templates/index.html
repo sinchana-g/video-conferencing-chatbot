@@ -47,6 +47,18 @@
         background-color: black;
         margin: 10px;
     }
+        
+    #interviewer-wrapper {
+        display: flex;
+        align-items: center;
+    }
+
+    #score-display {
+        font-weight: bold;
+        margin-right: 15px;
+        white-space: nowrap;
+    }
+
 
 
 
@@ -152,7 +164,10 @@
 
     <!-- Video container for candidate and interviewer -->
     <div class="video-container">
-        <div id="three-d-avatar-container"></div>
+        <div id="interviewer-wrapper" style="display: flex; align-items: center;">
+            <div id="score-display" style="display: none; font-weight: bold; margin-right: 15px; white-space: nowrap;">Score: 0</div>
+            <div id="three-d-avatar-container"></div>
+        </div>
         <video id="candidate-video" autoplay playsinline></video>
     </div>
 
@@ -428,6 +443,7 @@
         $("#chat-box").append(`<div class="message bot-message loading">Typing...</div>`);
         $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
 
+        
         $.ajax({
             type: "POST",
             url: "/ask_scenario",
@@ -436,6 +452,12 @@
                 $(".loading").remove();
                 $("#chat-box").append(`<div class="message bot-message">${response.response}</div>`);
                 $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
+                
+                // Show score if available
+                if (response.score !== undefined) {
+                    $("#score-display").text(`Score: ${response.score.toFixed(2)} / 2`);
+                    $("#score-display").show();  // Make sure it's visible
+                }
 
                 // If job description is needed, update it
                 if (response.job_title && response.job_description) {
