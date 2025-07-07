@@ -46,7 +46,7 @@ def generate_job_description(job_title):
     Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
     """
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4.1",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500,
         temperature=0.7
@@ -66,7 +66,7 @@ def extract_skills_from_jd(jd_text):
     For example: Communication, Teamwork, Problem Solving, Adaptability, Leadership."""
     
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4.1",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=150
@@ -155,7 +155,7 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     ]
 
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4.1",
         messages=messages,
         temperature=0.5,
         max_tokens=200
@@ -185,7 +185,7 @@ def score_answer(scenario_text, follow_up_question, user_answer):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview",
+        model="gpt-4.1",
         messages=[{"role": "user", "content": scoring_prompt}],
         temperature=0,
         max_tokens=5
@@ -238,10 +238,12 @@ def chatbot_response_with_history(user_input, job_description=None):
     
 def generate_speech(text):
     """Convert text response to speech using OpenAI TTS."""
+    prompt_text = f"Speak in a professional and welcoming tone: {text}"
     response = client.audio.speech.create(
-        model="tts-1",
-        voice="shimmer",  # Available voices: alloy, echo, fable, onyx, nova, shimmer
-        input=text
+        model="gpt-4o-mini-tts",
+        voice="onyx", 
+        input=prompt_text,
+        speed=1.15
     )
     
     audio_path = "static/audio/response.mp3"
@@ -282,6 +284,25 @@ def generate_speech(text):
 #     return audio_path
 
 
+@app.route('/transcribe_audio', methods=['POST'])
+def transcribe_audio():
+    if 'audio' not in request.files:
+        return {'error': 'No audio file provided'}, 400
+
+    audio_file = request.files['audio']
+    
+    # Save to temp file
+    temp_path = "temp_audio.webm"
+    audio_file.save(temp_path)
+
+    # Transcribe using OpenAI 
+    transcription = client.audio.transcriptions.create(
+        model="gpt-4o-transcribe",  # or "gpt-4o"
+        file=open(temp_path, "rb"),
+        response_format="text"  # or "json"
+    )
+
+    return {'transcript': transcription}
 
 
 @app.route('/')
@@ -311,6 +332,7 @@ def ask():
         'response': bot_response,
         'audio': audio_url,
     })
+
 
 @app.route('/ask_scenario', methods=['POST'])
 def ask_scenario():

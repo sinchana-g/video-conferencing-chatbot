@@ -61,7 +61,6 @@
 
 
 
-
     /* Chat container */
     .chat-container {
         width: 400px;
@@ -168,7 +167,6 @@
             <div id="score-display" style="display: none; font-weight: bold; margin-right: 15px; white-space: nowrap;">Score: 0</div>
             <div id="three-d-avatar-container"></div>
         </div>
-        <div id="three-d-avatar-container"></div>
         <video id="candidate-video" autoplay playsinline></video>
     </div>
 
@@ -192,138 +190,103 @@
 
 
     <script>
-    // Initialize Socket.io
-    // const socket = io.connect("http://0.0.0.0:8080");
-        
-    // Dynamically get the current protocol (http or https) and host
     const baseURL = window.location.protocol + "//" + window.location.host;
     const socket = io.connect(baseURL);
 
+    let localPeerConnection, remotePeerConnection, localStream, remoteStream;
+    let scene, camera, renderer, avatar, head;
+    let mediaRecorder, recordedChunks = [];
+    let audioContext, analyser, microphone, javascriptNode;
+    let silenceStart = null;
+    const SILENCE_THRESHOLD = 0.01;  // Adjust as needed
+    const SILENCE_DELAY = 2000;      // 2 seconds of silence
+        
+    const audioPlayer = document.getElementById("audio-player");
 
-    let localPeerConnection;
-    let remotePeerConnection;
-    let localStream;
-    let remoteStream;
-
-    let scene, camera, renderer, avatar;
-    let head;
 
     function init3DAvatar() {
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         renderer = new THREE.WebGLRenderer();
 
-        // Load the background image immediately
         const texture_loader = new THREE.TextureLoader();
         texture_loader.load('static/background3.jpg', function(texture) {
             scene.background = texture;
             renderer.render(scene, camera);
-
         }, undefined, function (error) {
             console.error("Error loading background:", error);
         });
 
-        // Position the camera closer to the face
-        camera.position.set(0, 1.7, 2); // Adjust the z-value to zoom in closer to the face
+        camera.position.set(0, 1.7, 2);
+        camera.fov = 8;
+        camera.updateProjectionMatrix();
 
-        // Optional: Adjust FOV to make it feel more zoomed in
-        camera.fov = 8; // Lower value zooms in, higher value zooms out
-        camera.updateProjectionMatrix(); // Update projection matrix after changing FOV
-        
         const avatarContainer = document.getElementById('three-d-avatar-container');
         camera.aspect = avatarContainer.offsetWidth / avatarContainer.offsetHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(avatarContainer.offsetWidth, avatarContainer.offsetHeight);
-        avatarContainer.appendChild(renderer.domElement);  // Append to the new container
+        avatarContainer.appendChild(renderer.domElement);
 
-        // Add lighting to the scene
-        const light = new THREE.AmbientLight(0x404040, 5);  // Ambient light
-        scene.add(light);
-        
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);  // Directional light
+        scene.add(new THREE.AmbientLight(0x404040, 5));
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(1, 1, 1).normalize();
         scene.add(directionalLight);
 
-        // Load the GLB avatar model using THREE.GLTFLoader
         const loader = new THREE.GLTFLoader();
-        loader.load(baseURL+'/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
+        loader.load(baseURL + '/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
             avatar = gltf.scene;
-            avatar.scale.set(1, 1, 1);  // Adjust the avatar scale
-            avatar.position.set(0, 0, 0);  // Position the avatar in the scene
+            avatar.scale.set(1, 1, 1);
+            avatar.position.set(0, 0, 0);
             scene.add(avatar);
             avatar.traverse((child) => {
-                // console.log(child.name);  // Print names of all parts
                 if (child.name.toLowerCase().includes("head")) {
-                    head = child;  // Assign head if found
+                    head = child;
                 }
-                // if (child.isMesh && child.morphTargetDictionary) {
-                //     console.log(child.name, child.morphTargetDictionary);
-                // }
             });
-
         }, undefined, function (error) {
             console.error("Error loading GLB model:", error);
         });
 
-        camera.position.z = 3;  // Adjust camera position
+        camera.position.z = 3;
     }
 
     function animateMouth(intensity) {
-        avatar.traverse((child) => {
+        avatar?.traverse((child) => {
             if (child.isMesh && child.morphTargetDictionary && child.name === "Wolf3D_Head") {
                 if ("mouthOpen" in child.morphTargetDictionary) {
-                    const openIndex = child.morphTargetDictionary["mouthOpen"];
-                    child.morphTargetInfluences[openIndex] = intensity;
+                    child.morphTargetInfluences[child.morphTargetDictionary["mouthOpen"]] = intensity;
                 }
                 if ("mouthSmile" in child.morphTargetDictionary) {
-                    const smileIndex = child.morphTargetDictionary["mouthSmile"];
-                    child.morphTargetInfluences[smileIndex] = intensity * 0.3; // Adjust smile effect
+                    child.morphTargetInfluences[child.morphTargetDictionary["mouthSmile"]] = intensity * 0.3;
                 }
             }
         });
     }
 
     function syncMouthWithAudio() {
-        if (!avatar) return;
-        
-        if (!audioPlayer.paused) {
-            let mouthIntensity = Math.abs(Math.sin(performance.now() * 0.005)); // Smooth open/close
-            animateMouth(mouthIntensity);
-            requestAnimationFrame(syncMouthWithAudio);
-        } else {
-            animateMouth(0); // Keep mouth closed when no audio
+        if (!avatar || audioPlayer.paused) {
+            animateMouth(0);
+            return;
         }
+        let mouthIntensity = Math.abs(Math.sin(performance.now() * 0.005));
+        animateMouth(mouthIntensity);
+        requestAnimationFrame(syncMouthWithAudio);
     }
-
 
     function animate() {
         requestAnimationFrame(animate);
-        // Rotate the avatar for animation (optional)
-        // if (avatar) {
-        //     avatar.rotation.y += 0.01;
-        // }
-
         renderer.render(scene, camera);
     }
 
-
-
-    // Access the user's webcam
     async function startWebcam() {
         try {
-            // Stop any existing audio tracks before starting new ones
-            if (localStream) {
-                localStream.getAudioTracks().forEach(track => track.stop());
-            }
-
-            // Request new media stream with echo cancellation
+            localStream?.getAudioTracks().forEach(track => track.stop());
             localStream = await navigator.mediaDevices.getUserMedia({
                 video: true,
-                audio: { echoCancellation: true, noiseSuppression: true },
+                audio: { echoCancellation: true, noiseSuppression: true }
             });
 
-            const videoElement = document.getElementById('candidate-video');
-            videoElement.srcObject = localStream;
+            document.getElementById('candidate-video').srcObject = localStream;
 
             localPeerConnection = new RTCPeerConnection();
             localStream.getTracks().forEach(track => {
@@ -331,9 +294,7 @@
             });
 
             localPeerConnection.onicecandidate = event => {
-                if (event.candidate) {
-                    socket.emit('ice-candidate', event.candidate);
-                }
+                if (event.candidate) socket.emit('ice-candidate', event.candidate);
             };
 
             remotePeerConnection = new RTCPeerConnection();
@@ -341,74 +302,107 @@
                 remoteStream = event.streams[0];
                 const remoteVideo = document.getElementById('interviewer-video');
                 remoteVideo.srcObject = remoteStream;
-                document.getElementById('interviewer-video').muted = true;  // Mute interviewer output
+                remoteVideo.muted = true;
             };
-
         } catch (error) {
             console.error('Error accessing webcam: ', error);
         }
     }
 
-
-    // Start webcam
-    startWebcam();
-    
-
-    // Global recognition instance
-    var recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = "en-US";
-    recognition.continuous = true;
-    recognition.interimResults = false;
-
-    recognition.onresult = function(event) {
-        var transcript = event.results[event.results.length - 1][0].transcript;
-        $("#user-input").val(transcript);
-        sendMessage();
-    };
-
-    recognition.onerror = function(event) {
-        console.error("Speech recognition error:", event.error);
-    };
-
-    function startListening() {
-        if (recognition) {
-            recognition.start();
-        }
-    }
-
-    function stopRecognition() {
-        if (recognition) {
-            recognition.onend = null; // Prevent auto-restart
-            recognition.abort();
-        }
-    }
-
-    // Ensure recognition restarts only after TTS playback
-    var audioPlayer = document.getElementById("audio-player");
-    audioPlayer.onended = function() {
-        animateMouth(0);  // Ensure mouth fully closes
-        startListening();  // Resume listening after TTS finishes
-
-        // 🎤 Restart microphone stream
-        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    function startRecording() {
+        recordedChunks = [];
+        navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
 
-                // Remove any previous tracks
-                localStream.getAudioTracks().forEach(track => track.stop());
-                localStream = stream;
+                audioContext = new AudioContext();
+                microphone = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512;
+                microphone.connect(analyser);
 
-                // Add the new audio track to peer connection
-                localPeerConnection.getSenders().forEach(sender => {
-                    if (sender.track.kind === 'audio') {
-                        sender.replaceTrack(stream.getAudioTracks()[0]);
+                javascriptNode = audioContext.createScriptProcessor(512, 1, 1);
+                analyser.connect(javascriptNode);
+                javascriptNode.connect(audioContext.destination);
+
+                silenceStart = null;
+
+                javascriptNode.onaudioprocess = () => {
+                    const array = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(array);
+                    let values = 0;
+                    for (let i = 0; i < array.length; i++) values += array[i];
+                    const average = values / array.length / 255;
+
+                    if (average < SILENCE_THRESHOLD) {
+                        if (silenceStart === null) {
+                            silenceStart = Date.now();
+                        } else if (Date.now() - silenceStart > SILENCE_DELAY) {
+                            stopRecording();  // Stop on silence
+                        }
+                    } else {
+                        silenceStart = null; // Reset silence timer
                     }
-                });
+                };
 
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(track => track.stop());
+
+                    cleanupAudio();
+
+                    const blob = new Blob(recordedChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append("audio", blob, "recording.wav");
+
+                    // Send to backend
+                    $.ajax({
+                        type: "POST",
+                        url: "/transcribe_audio",
+                        data: formData,
+                        processData: false,      // Important: prevent jQuery from processing FormData
+                        contentType: false,      // Important: prevent jQuery from setting content type
+                        success: function(response) {
+                            console.log("Transcript:", response.transcript);
+                            $("#user-input").val(response.transcript);
+                            sendMessage();
+                        },
+                        error: function(error) {
+                            console.error("Error transcribing audio:", error);
+                        }
+                    });
+
+                };
+
+                mediaRecorder.start();
+                console.log("Recording started");
             })
-            .catch(error => console.error("Error restarting microphone:", error));
+            .catch(console.error);
+    }
+
+    function cleanupAudio() {
+        javascriptNode?.disconnect();
+        analyser?.disconnect();
+        microphone?.disconnect();
+        audioContext?.close();
+    }
+
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+        }
+    }
+
+    document.getElementById("audio-player").onended = function() {
+        animateMouth(0);
+        startRecording();
     };
-
-
 
     function updateJobInfo(title, description) {
         document.getElementById("job-title").innerText = `Job Title: ${title}`;
@@ -418,26 +412,21 @@
             ${description}`;
     }
 
-    // Fetch job description on page load
     function fetchJobDescription() {
         $.ajax({
             type: "GET",
-            url: "/get_job_description", // URL where the job info is fetched
+            url: "/get_job_description",
             success: function(response) {
                 updateJobInfo(response.job_title, response.job_description);
-                // document.querySelector(".loading-indicator").style.display = "none"; // Hide loading indicator
             },
             error: function(error) {
                 console.error("Error fetching job description:", error);
-                document.querySelector(".loading-indicator").innerText = "Failed to load job info.";
             }
         });
     }
 
-
-    
     function sendMessage() {
-        var userInput = $("#user-input").val().trim();
+        const userInput = $("#user-input").val().trim();
         if (userInput === "") return;
 
         $("#chat-box").append(`<div class="message user-message">${userInput}</div>`);
@@ -452,67 +441,46 @@
                 $(".loading").remove();
                 $("#chat-box").append(`<div class="message bot-message">${response.response}</div>`);
                 $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
-                
-                // Show score if available
+
                 if (response.score !== undefined) {
-                    $("#score-display").text(`Score: ${response.score.toFixed(2)} / 2`);
-                    $("#score-display").show();  // Make sure it's visible
+                    $("#score-display").text(`Score: ${response.score.toFixed(2)} / 2`).show();
                 }
 
-                // If job description is needed, update it
                 if (response.job_title && response.job_description) {
                     updateJobInfo(response.job_title, response.job_description);
                 }
 
-                var audioPlayer = document.getElementById("audio-player");
+                const audioPlayer = document.getElementById("audio-player");
 
-                // Stop recognition before playing TTS
-                stopRecognition();
-
-                // REMOVE OLD AUDIO TRACKS BEFORE PLAYING NEW AUDIO
-                localStream.getAudioTracks().forEach(track => {
+                localStream?.getAudioTracks().forEach(track => {
                     track.stop();
                     localStream.removeTrack(track);
                 });
 
-                // Set and play the new TTS response
                 audioPlayer.src = response.audio + "?t=" + new Date().getTime();
                 audioPlayer.style.display = "block";
-                audioPlayer.volume = 0.5;  // Reduce volume slightly
-                // audioPlayer.muted = true;  // Mute if only text feedback is needed
-
+                audioPlayer.volume = 0.5;
                 audioPlayer.play();
-                syncMouthWithAudio(); // Start syncing mouth when audio plays
-
-                audioPlayer.onended = function() {
-                    startListening();
-                }
+                syncMouthWithAudio();
             }
         });
 
         $("#user-input").val("");
     }
 
-
-
-    // Start listening when page loads
-    startListening();
-
+    startWebcam();
+    startRecording();
+    init3DAvatar();
+    animate();
+    window.onload = fetchJobDescription;
 
     $("#user-input").keypress(function(event) {
         if (event.which === 13) {
             sendMessage();
         }
     });
+    </script>
 
-    init3DAvatar();    // Your existing 3D avatar init
-    animate();         // Start rendering the avatar
-
-    window.onload = fetchJobDescription(); // <== async call AFTER page loads
-
-    
-
-</script>
 
 
 
