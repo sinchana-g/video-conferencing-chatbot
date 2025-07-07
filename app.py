@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import cosine_similarity
+from google.cloud import texttospeech
 
 
 # Load environment variables from .env file
@@ -32,7 +33,6 @@ skill_embedding_matrix = normalize(np.array([e.embedding for e in skill_embeddin
 
 scenario_index = 0
 follow_up_count = 0
-<<<<<<< HEAD
 scenario_scores = []
 follow_up_question = ""
 
@@ -46,7 +46,7 @@ def generate_job_description(job_title):
     Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
     """
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4-1106-preview",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500,
         temperature=0.7
@@ -66,7 +66,7 @@ def extract_skills_from_jd(jd_text):
     For example: Communication, Teamwork, Problem Solving, Adaptability, Leadership."""
     
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4-1106-preview",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=150
@@ -124,13 +124,13 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     scenario_history.append({"role": "user", "content": user_input})
     
     closing = (
-        "- This is the final follow-up question for the scenario. Close it out with a summary statement afterward."
+        "- Ask a follow-up question to wrap up the scenario."
         if follow_up_count == 1 else
         "- Ask one follow-up question."
     )
 
     
-    prompt = f"""You are an AI interviewer conducting a scenario-based behavioral interview for a candidate applying for the role of **{job_title}**.
+    prompt = f"""You are a professional AI interviewer conducting a behavioral scenario interview for the role of **{job_title}**.
 
     Job Description:
     {job_description}
@@ -138,22 +138,29 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     Scenario:
     {scenario_text}
 
-    Instructions:
-    - Use the job title and job description to make this scenario and the follow-up questions as relevant as possible to the role.
-    - Ask **one** follow-up question at a time, digging deeper into the candidate's reasoning, actions, or impact.
-    - You have asked {follow_up_count} follow-ups so far.
-    {closing}
-    - Do **not** ask multiple questions at once.
-    - Keep it professional, concise, and focused on relevant skills and behaviors."""
+    Your role:
+    - Ask one clear, concise follow-up question based on the candidate's last response.
+    - Focus on their reasoning, decisions, and impact.
+    - Avoid repeating previous questions or giving unnecessary context.
+    - Do **not** mention how many questions you've asked or will ask.
+    - Do not explain your process — just ask the next question in a natural, professional tone.
+    """
+
 
     
+    messages = [
+        {"role": "system", "content": prompt},
+        *scenario_history[-4:],  # trim to last few if needed
+        {"role": "user", "content": user_input}
+    ]
+
     response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt},
-                 {"role": "user", "content": user_input}],
-        temperature=0.7,
+        model="gpt-4-1106-preview",
+        messages=messages,
+        temperature=0.5,
         max_tokens=200
     )
+
     
     bot_reply = response.choices[0].message.content.strip()
     scenario_history.append({"role": "assistant", "content": bot_reply})
@@ -161,7 +168,6 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
     return bot_reply
 
 
-<<<<<<< HEAD
 def score_answer(scenario_text, follow_up_question, user_answer):
     scoring_prompt = f"""
     You are an AI interviewer. Evaluate the candidate's response to a scenario-based question.
@@ -179,7 +185,7 @@ def score_answer(scenario_text, follow_up_question, user_answer):
     """
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4-1106-preview",
         messages=[{"role": "user", "content": scoring_prompt}],
         temperature=0,
         max_tokens=5
@@ -200,24 +206,29 @@ def chatbot_response_with_history(user_input, job_description=None):
 
     # Generate the interview-specific system prompt
     prompt = f"""
-    You are an AI interviewer conducting a job interview based on this job description:
+    You are an experienced AI interviewer conducting a structured behavioral interview for the role of **{current_job_title}**.
 
+    Use this job description to guide your questions:
     {job_description}
 
-    Ask one relevant question at a time based on the user's role, experience, and the job description. 
-    After each question, wait for their response and then ask a follow-up. 
-    Keep your questions professional, and focus on the job position. 
-    Do not list multiple questions at once.
-    """ 
+    Your task:
+    - Ask **one** well-phrased, relevant question at a time.
+    - Base your questions on the candidate's resume, past responses, and the job description.
+    - Keep the tone professional and focused on uncovering the candidate’s qualifications and thought process.
+    - Avoid casual chatter or vague open-ended prompts.
+    - Do **not** ask multiple questions at once or rephrase the same question.
+    """
+
     
     response = client.chat.completions.create(
-        model="gpt-4", 
+        model="gpt-4-1106-preview", 
         messages=[
             {"role": "system", "content": prompt},
+            *conversation_history[-4], #only last few exchanges to stay focused
             {"role": "user", "content": user_input},
         ],
-        max_tokens=150,  # Adjust for longer/shorter responses
-        temperature=0.7,  # Controls the creativity of the response
+        max_tokens=200,  # Adjust for longer/shorter responses
+        temperature=0.5,  # Controls the creativity of the response
     )
     bot_reply = response.choices[0].message.content.strip()
     conversation_history.append({"role": "assistant", "content": bot_reply})  # Save bot response
@@ -229,7 +240,7 @@ def generate_speech(text):
     """Convert text response to speech using OpenAI TTS."""
     response = client.audio.speech.create(
         model="tts-1",
-        voice="onyx",  # Available voices: alloy, echo, fable, onyx, nova, shimmer
+        voice="shimmer",  # Available voices: alloy, echo, fable, onyx, nova, shimmer
         input=text
     )
     
@@ -238,6 +249,38 @@ def generate_speech(text):
         audio_file.write(response.content)
 
     return audio_path
+
+# def generate_speech(text):
+#     client = texttospeech.TextToSpeechClient()
+
+#     synthesis_input = texttospeech.SynthesisInput(text=text)
+
+#     # Configure voice (you can customize language, gender, voice name, etc.)
+#     voice = texttospeech.VoiceSelectionParams(
+#         language_code="en-US", 
+#         name="en-US-Wavenet-J",  # Change this based on your preferred voice
+#         ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
+#     )
+
+#     # Select the audio file type
+#     audio_config = texttospeech.AudioConfig(
+#         audio_encoding=texttospeech.AudioEncoding.MP3
+#     )
+
+#     # Perform the TTS request
+#     response = client.synthesize_speech(
+#         input=synthesis_input, 
+#         voice=voice, 
+#         audio_config=audio_config
+#     )
+
+#     # Save the output as an MP3 file
+#     audio_path = "static/audio/response.mp3"
+#     with open(audio_path, "wb") as out:
+#         out.write(response.audio_content)
+
+#     return audio_path
+
 
 
 
@@ -292,14 +335,7 @@ def ask_scenario():
     if follow_up_question:
         score = score_answer(current_scenario_text, follow_up_question, user_input)
         scenario_scores.append(score)
-    
-    # Generate the bot response
-        return jsonify({
-            'response': "Thank you, that concludes the interview.",
-            'audio': generate_speech("Thank you, that concludes the interview.")
-        })
 
-    current_scenario_text = scenario_list[scenario_index][1]
 
     bot_response = scenario_chatbot_response(
         user_input,
@@ -314,7 +350,7 @@ def ask_scenario():
 
     # Update follow-up count and scenario index
     follow_up_count += 1
-    if follow_up_count >= 2:
+    if follow_up_count >= 3:
         follow_up_count = 0
         scenario_index += 1
 
