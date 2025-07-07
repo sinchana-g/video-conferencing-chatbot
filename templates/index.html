@@ -199,7 +199,7 @@
     let audioContext, analyser, microphone, javascriptNode;
     let silenceStart = null;
     const SILENCE_THRESHOLD = 0.01;  // Adjust as needed
-    const SILENCE_DELAY = 2000;      // 2 seconds of silence
+    const SILENCE_DELAY = 2000; 
         
     const audioPlayer = document.getElementById("audio-player");
 
@@ -376,6 +376,7 @@
                             console.error("Error transcribing audio:", error);
                         }
                     });
+                    // recordedChunks = [];
 
                 };
 

@@ -44,17 +44,17 @@ scenario_history = []
 def generate_job_description(job_title):
     prompt = f"""
     Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
+
+    Do not use markdown or formatting symbols (such as **, ##, -, etc.). Just write clean plain text in full sentences and paragraphs.
     """
+
     response = client.chat.completions.create(
         model="gpt-4.1",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500,
         temperature=0.7
     )
-    raw = response.choices[0].message.content.strip()
-    cleaned = re.sub(r"(?i)(Job Title:.*\n?)|(Job Description:.*\n?)", "", raw).strip()
-
-    return cleaned
+    return response.choices[0].message.content.strip()
 
 
 def extract_skills_from_jd(jd_text):
@@ -122,50 +122,63 @@ def get_scenarios(job_description):
 
 def scenario_chatbot_response(user_input, job_title, job_description, scenario_text, follow_up_count):
     scenario_history.append({"role": "user", "content": user_input})
-    
-    closing = (
-        "- Ask a follow-up question to wrap up the scenario."
-        if follow_up_count == 1 else
-        "- Ask one follow-up question."
-    )
 
-    
-    prompt = f"""You are a professional AI interviewer conducting a behavioral scenario interview for the role of **{job_title}**.
+    if follow_up_count == 0:
+        # First question: introduce the situation naturally and ask
+        prompt = f"""You’re a professional interviewer speaking to a candidate for a **{job_title}** position.
 
-    Job Description:
-    {job_description}
+        Job Description:
+        {job_description}
 
-    Scenario:
-    {scenario_text}
+        Here’s the situation you want to explore:
+        {scenario_text}
 
-    Your role:
-    - Ask one clear, concise follow-up question based on the candidate's last response.
-    - Focus on their reasoning, decisions, and impact.
-    - Avoid repeating previous questions or giving unnecessary context.
-    - Do **not** mention how many questions you've asked or will ask.
-    - Do not explain your process — just ask the next question in a natural, professional tone.
-    """
+        Your task:
+        - Rephrase or summarize this situation in a way that feels natural and relevant to the candidate’s role.
+        - Don’t just repeat the original scenario text — make it sound like something you'd say in conversation.
+        - Avoid framing it like a script. Just lead into it like a real interviewer.
+        - Keep your tone calm, clear, and genuinely curious — like you're having a thoughtful conversation.
+        - Keep it short.
+        """
+    else:
+        # Follow-up: react to their last answer
+        prompt = f"""You’re continuing a behavioral interview for a **{job_title}** role.
 
+        Job Description:
+        {job_description}
 
-    
+        Original situation (for your reference):
+        {scenario_text}
+
+        The candidate just said:
+        \"{user_input}\"
+
+        Your task:
+        - Ask **one** natural follow-up question that builds on what they just shared.
+        - Try to learn more about their reasoning, the impact of their actions, or how they handled challenges.
+        - Avoid repeating the scenario or their answer — just focus on going one layer deeper.
+        - Keep your tone warm, curious, and professional — like a real interviewer who’s actively listening.
+        """
+
     messages = [
         {"role": "system", "content": prompt},
-        *scenario_history[-4:],  # trim to last few if needed
+        *scenario_history[-4:],
         {"role": "user", "content": user_input}
     ]
 
     response = client.chat.completions.create(
         model="gpt-4.1",
         messages=messages,
-        temperature=0.5,
+        temperature=0.6,
         max_tokens=200
     )
 
-    
     bot_reply = response.choices[0].message.content.strip()
     scenario_history.append({"role": "assistant", "content": bot_reply})
-    
+
     return bot_reply
+
+
 
 
 def score_answer(scenario_text, follow_up_question, user_answer):
@@ -221,7 +234,7 @@ def chatbot_response_with_history(user_input, job_description=None):
 
     
     response = client.chat.completions.create(
-        model="gpt-4-1106-preview", 
+        model="gpt-4.1", 
         messages=[
             {"role": "system", "content": prompt},
             *conversation_history[-4], #only last few exchanges to stay focused
@@ -238,11 +251,20 @@ def chatbot_response_with_history(user_input, job_description=None):
     
 def generate_speech(text):
     """Convert text response to speech using OpenAI TTS."""
-    prompt_text = f"Speak in a professional and welcoming tone: {text}"
+    instructions = """Voice Affect: Professional, confident, and attentive. Demonstrates authority without being intimidating.
+
+Tone: Supportive, thoughtful, and respectful. Curious about the candidate’s experiences and insights.
+
+Pacing: Steady and deliberate. Slightly slower when asking complex or reflective questions, allowing candidates time to process.
+
+Emotions: Calm interest, encouragement, and professionalism.
+
+Pronunciation: Clear and articulate. Emphasize key phrases like “decision-making,” “impact,” or “teamwork.” """
     response = client.audio.speech.create(
         model="gpt-4o-mini-tts",
-        voice="onyx", 
-        input=prompt_text,
+        voice="verse", 
+        instructions = instructions,
+        input=text,
         speed=1.15
     )
     
@@ -251,37 +273,6 @@ def generate_speech(text):
         audio_file.write(response.content)
 
     return audio_path
-
-# def generate_speech(text):
-#     client = texttospeech.TextToSpeechClient()
-
-#     synthesis_input = texttospeech.SynthesisInput(text=text)
-
-#     # Configure voice (you can customize language, gender, voice name, etc.)
-#     voice = texttospeech.VoiceSelectionParams(
-#         language_code="en-US", 
-#         name="en-US-Wavenet-J",  # Change this based on your preferred voice
-#         ssml_gender=texttospeech.SsmlVoiceGender.NEUTRAL
-#     )
-
-#     # Select the audio file type
-#     audio_config = texttospeech.AudioConfig(
-#         audio_encoding=texttospeech.AudioEncoding.MP3
-#     )
-
-#     # Perform the TTS request
-#     response = client.synthesize_speech(
-#         input=synthesis_input, 
-#         voice=voice, 
-#         audio_config=audio_config
-#     )
-
-#     # Save the output as an MP3 file
-#     audio_path = "static/audio/response.mp3"
-#     with open(audio_path, "wb") as out:
-#         out.write(response.audio_content)
-
-#     return audio_path
 
 
 @app.route('/transcribe_audio', methods=['POST'])
@@ -299,7 +290,8 @@ def transcribe_audio():
     transcription = client.audio.transcriptions.create(
         model="gpt-4o-transcribe",  # or "gpt-4o"
         file=open(temp_path, "rb"),
-        response_format="text"  # or "json"
+        response_format="text",
+        language="en"
     )
 
     return {'transcript': transcription}
