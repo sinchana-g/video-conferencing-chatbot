@@ -120,29 +120,57 @@ def get_scenarios(job_description):
     return scenarios
 
 
-def scenario_chatbot_response(user_input, job_title, job_description, scenario_text, follow_up_count):
-    scenario_history.append({"role": "user", "content": user_input})
+def generate_scenario_text(job_title, job_description, scenario_text):
+    prompt = f"""
+        You are an expert behavioral interviewer.
 
-    if follow_up_count == 0:
-        # First question: introduce the situation naturally and ask
-        prompt = f"""You’re a professional interviewer speaking to a candidate for a **{job_title}** position.
+        Your task:
+        - Reframe the following scenario so that it feels realistic and relevant to someone interviewing for a **{job_title}** role.
+        - Use the job description below to guide your rewrite.
+        - Keep the tone conversational and professional.
+        - Do NOT include any questions — just describe the adapted situation in 3–4 sentences max.
+        - Avoid repeating the original scenario text word-for-word.
+        - Make it feel specific to this job context.
 
         Job Description:
         {job_description}
 
-        Here’s the situation you want to explore:
+        Original Scenario:
+        "{scenario_text}"
+
+        Now rewrite the scenario accordingly:
+        """
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=180
+    )
+
+    return response.choices[0].message.content.strip()
+
+
+
+def scenario_chatbot_response(user_input, job_title, job_description, scenario_text, follow_up_count):
+    scenario_history.append({"role": "user", "content": user_input})
+
+    if follow_up_count == 0:
+        prompt = f"""You’re a professional interviewer speaking to a candidate for a **{job_title}** role.
+
+        Job Description:
+        {job_description}
+
+        Here’s the situation:
         {scenario_text}
 
         Your task:
-        - Rephrase or summarize this situation in a way that feels natural and relevant to the candidate’s role.
-        - Don’t just repeat the original scenario text — make it sound like something you'd say in conversation.
-        - Avoid framing it like a script. Just lead into it like a real interviewer.
-        - Keep your tone calm, clear, and genuinely curious — like you're having a thoughtful conversation.
-        - Keep it short.
+        - Introduce this situation naturally to the candidate.
+        - Keep your tone conversational, warm, and clear — like you're genuinely curious about their thinking.
         """
+
     else:
-        # Follow-up: react to their last answer
-        prompt = f"""You’re continuing a behavioral interview for a **{job_title}** role.
+        prompt = f"""You’re continuing a behavioral interview for a **{job_title}** position.
 
         Job Description:
         {job_description}
@@ -150,14 +178,13 @@ def scenario_chatbot_response(user_input, job_title, job_description, scenario_t
         Original situation (for your reference):
         {scenario_text}
 
-        The candidate just said:
-        \"{user_input}\"
+        Candidate just said:
+        "{user_input}"
 
         Your task:
-        - Ask **one** natural follow-up question that builds on what they just shared.
-        - Try to learn more about their reasoning, the impact of their actions, or how they handled challenges.
-        - Avoid repeating the scenario or their answer — just focus on going one layer deeper.
-        - Keep your tone warm, curious, and professional — like a real interviewer who’s actively listening.
+        - Ask **one** follow-up question to understand more about their decisions, thought process, or the outcome.
+        - Avoid repeating the scenario or previous answers.
+        - Keep your tone professional and curious — like a thoughtful human interviewer.
         """
 
     messages = [
@@ -344,6 +371,12 @@ def ask_scenario():
 
     current_scenario_text = scenario_list[scenario_index][1]
     
+    revised_scenario_text = generate_scenario_text(
+        current_job_title, 
+        current_job_description, 
+        current_scenario_text
+    )
+    
     score = 0
     # Score the previous answer using the stored follow-up question
     if follow_up_question:
@@ -355,7 +388,7 @@ def ask_scenario():
         user_input,
         current_job_title,
         current_job_description,
-        current_scenario_text,
+        revised_scenario_text,
         follow_up_count
     )
     
