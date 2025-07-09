@@ -277,16 +277,15 @@ def chatbot_response_with_history(user_input, job_description=None):
 
     
 def generate_speech(text):
-    """Convert text response to speech using OpenAI TTS."""
     instructions = """Voice Affect: Professional, confident, and attentive. Demonstrates authority without being intimidating.
 
-Tone: Supportive, thoughtful, and respectful. Curious about the candidate’s experiences and insights.
+    Tone: Supportive, thoughtful, and respectful. Curious about the candidate’s experiences and insights.
 
-Pacing: Steady and deliberate. Slightly slower when asking complex or reflective questions, allowing candidates time to process.
+    Pacing: Steady and deliberate. Slightly slower when asking complex or reflective questions, allowing candidates time to process.
 
-Emotions: Calm interest, encouragement, and professionalism.
+    Emotions: Calm interest, encouragement, and professionalism.
 
-Pronunciation: Clear and articulate. Emphasize key phrases like “decision-making,” “impact,” or “teamwork.” """
+    Pronunciation: Clear and articulate. Emphasize key phrases like “decision-making,” “impact,” or “teamwork.” """
     response = client.audio.speech.create(
         model="gpt-4o-mini-tts",
         voice="verse", 
@@ -334,6 +333,15 @@ def get_job_description():
     current_job_description = generate_job_description(current_job_title)
     global scenario_list
     scenario_list = get_scenarios(current_job_description)
+    global adapted_scenarios 
+    adapted_scenarios = []
+    for _, scenario in scenario_list:
+        adapted = generate_scenario_text(current_job_title, current_job_description, scenario)
+        adapted_scenarios.append(adapted)
+    # Reset tracking
+    scenario_index = 0
+    follow_up_count = 0
+    
     return jsonify({
         'job_title': current_job_title,
         'job_description': current_job_description
@@ -355,7 +363,7 @@ def ask():
 
 @app.route('/ask_scenario', methods=['POST'])
 def ask_scenario():
-    global scenario_index, follow_up_count, follow_up_question
+    global scenario_index, follow_up_count, follow_up_question, scenario_scores
     
     user_input = request.form['user_input']
     
@@ -369,13 +377,7 @@ def ask_scenario():
             'average_score': average_score
         })
 
-    current_scenario_text = scenario_list[scenario_index][1]
-    
-    revised_scenario_text = generate_scenario_text(
-        current_job_title, 
-        current_job_description, 
-        current_scenario_text
-    )
+    current_scenario_text = adapted_scenarios[scenario_index]
     
     score = 0
     # Score the previous answer using the stored follow-up question
@@ -388,7 +390,7 @@ def ask_scenario():
         user_input,
         current_job_title,
         current_job_description,
-        revised_scenario_text,
+        current_scenario_text,
         follow_up_count
     )
     
