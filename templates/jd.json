@@ -1,0 +1,26 @@
+{
+  "job_title": "AI Engineer",
+  "job_description": {
+      "about_role": "We are seeking a passionate and experienced AI Engineer to join our team in designing, building, and deploying AI-powered solutions that solve real-world problems. You will collaborate closely with data scientists, product managers, and software engineers to bring state-of-the-art machine learning models into production.",
+      "responsibilities": [
+        "Design and implement machine learning and deep learning models for NLP, computer vision, and recommendation systems.",
+        "Collaborate with cross-functional teams to integrate AI solutions into scalable products.",
+        "Develop data pipelines and model serving infrastructure using cloud services (e.g., AWS, GCP, Azure).",
+        "Optimize and fine-tune models for performance, latency, and accuracy in production environments.",
+        "Stay current with research in artificial intelligence and machine learning; contribute to internal knowledge sharing."
+      ],
+      "requirements": [
+        "Bachelor’s or Master’s degree in Computer Science, AI, Machine Learning, or a related field.",
+        "2+ years of experience developing and deploying ML/AI models in production.",
+        "Proficient in Python and ML libraries (e.g., TensorFlow, PyTorch, Scikit-learn).",
+        "Experience with cloud platforms and containerization tools (Docker, Kubernetes).",
+        "Solid understanding of data structures, algorithms, and software engineering principles.",
+        "Strong problem-solving and communication skills."
+      ],
+      "preferred_qualifications": [
+        "Experience with LLMs, generative AI, or reinforcement learning.",
+        "Familiarity with MLOps tools (e.g., MLflow, SageMaker, Vertex AI).",
+        "Contributions to open-source AI projects or published research."
+      ]
+    }
+}

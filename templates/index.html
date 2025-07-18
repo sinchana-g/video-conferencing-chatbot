@@ -1,489 +1,349 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatbot with Voice</title>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <style>
+  <title>Video Chatbot</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
     body {
-        font-family: Arial, sans-serif;
-        background-color: #f4f4f4;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        height: 100vh;
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      padding: 20px;
     }
 
-    /* Video container */
     .video-container {
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-top: 20px;
-        margin-bottom: 20px;
-        flex-wrap: nowrap; /* Keeps items from wrapping to the next line */
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 20px;
+      margin-bottom: 20px;
+      flex-wrap: nowrap;
     }
 
-    /* Candidate video */
     #candidate-video {
-        width: 400px; /* Adjust width */
-        height: 300px; /* Adjust height */
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        background-color: black;
-        margin: 10px;
-        transform: scaleX(-1);
+      width: 400px;
+      height: 300px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background-color: black;
+      margin: 10px;
+      transform: scaleX(-1);
     }
 
-    /* 3D avatar container */
     #three-d-avatar-container {
-        width: 400px; /* Adjust width */
-        height: 300px; /* Adjust height */
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        background-color: black;
-        margin: 10px;
+      width: 400px;
+      height: 300px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background-color: black;
+      margin: 10px;
     }
-        
+
     #interviewer-wrapper {
-        display: flex;
-        align-items: center;
+      display: flex;
+      align-items: center;
     }
 
     #score-display {
-        font-weight: bold;
-        margin-right: 15px;
-        white-space: nowrap;
-    }
-
-
-
-    /* Chat container */
-    .chat-container {
-        width: 400px;
-        max-width: 100%;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-        margin-top: 20px;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .chat-box {
-        height: 400px;
-        overflow-y: auto;
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .message {
-        padding: 10px;
-        border-radius: 8px;
-        margin: 5px;
-        max-width: 80%;
-        word-wrap: break-word;
-    }
-
-    .user-message {
-        background: #007bff;
-        color: white;
-        align-self: flex-end;
-    }
-
-    .bot-message {
-        background: #e9ecef;
-        align-self: flex-start;
-    }
-
-    .input-container {
-        display: flex;
-        padding: 10px;
-        border-top: 1px solid #ddd;
-        background: white;
+      font-weight: bold;
+      margin-right: 15px;
+      white-space: nowrap;
     }
 
     input {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        outline: none;
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      outline: none;
     }
 
     button {
-        margin-left: 10px;
-        padding: 10px 15px;
-        background: #007bff;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
+      margin-left: 10px;
+      padding: 10px 15px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
     }
 
     button:hover {
-        background: #0056b3;
+      background: #0056b3;
     }
 
     .loading {
-        font-size: 12px;
-        color: #888;
-        font-style: italic;
+      font-size: 12px;
+      color: #888;
+      font-style: italic;
     }
 
-    /* Job info display */
     .job-info-container {
-        margin-top: 20px;
-        background-color: #fff;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        text-align: center;
-        width: 80%;
+      margin-top: 20px;
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 80%;
     }
 
     .loading-indicator {
-        font-size: 14px;
-        color: #888;
-        font-style: italic;
+      font-size: 14px;
+      color: #888;
+      font-style: italic;
     }
-</style>
+
+    #transcript {
+      margin-top: 20px;
+      font-size: 1.2em;
+      color: #333;
+    }
+  </style>
 </head>
+
 <body>
-    <!-- Section to display Job Title and Description -->
-    <div class="job-info-container">
-        <h2 id="job-title">Job Title: Loading...</h2>
-        <p id="job-description">Job Description: Loading...</p>
+  <h2>Video Conferencing Chatbot</h2>
+
+  <div class="job-info-container">
+    <p id="status">Status: Loading...</p>
+  </div>
+
+  <div class="video-container">
+    <div id="interviewer-wrapper">
+      <div id="score-display" style="display: none;">Score: 0</div>
+      <div id="three-d-avatar-container"></div>
     </div>
+    <video id="candidate-video" autoplay playsinline></video>
+  </div>
 
-    <!-- Video container for candidate and interviewer -->
-    <div class="video-container">
-        <div id="interviewer-wrapper" style="display: flex; align-items: center;">
-            <div id="score-display" style="display: none; font-weight: bold; margin-right: 15px; white-space: nowrap;">Score: 0</div>
-            <div id="three-d-avatar-container"></div>
-        </div>
-        <video id="candidate-video" autoplay playsinline></video>
-    </div>
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
 
-
-    <!-- Chat container for the chatbot -->
-    <div class="chat-container">
-        <div class="chat-box" id="chat-box"></div>
-        <div class="input-container">
-            <input type="text" id="user-input" placeholder="Type your message..." autofocus>
-            <button onclick="sendMessage()">Send</button>
-        </div>
-    </div>
-
-    <audio id="audio-player" controls style="display:none;"></audio>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <div id="transcript">Transcript: <span id="text"></span></div>
+  <div id="bot-reply"></div> 
+    
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.3.2/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 
-
-    <script>
-    const baseURL = window.location.protocol + "//" + window.location.host;
-    const socket = io.connect(baseURL);
-
+  <script>
+    const socket = io();
     let localPeerConnection, remotePeerConnection, localStream, remoteStream;
     let scene, camera, renderer, avatar, head;
-    let mediaRecorder, recordedChunks = [];
-    let audioContext, analyser, microphone, javascriptNode;
-    let silenceStart = null;
-    const SILENCE_THRESHOLD = 0.01;  // Adjust as needed
-    const SILENCE_DELAY = 2000; 
-        
-    const audioPlayer = document.getElementById("audio-player");
+    let audioContext, processor, input, globalStream;
+    
+//     function updateJobInfo(title, description) {
+//         document.getElementById("job-title").innerText = `Job Title: ${title}`;
 
+//         let descText = "";
+//         if (typeof description === "object") {
+//             descText = JSON.stringify(description, null, 2); // pretty print JSON
+//         } else {
+//             descText = description;
+//         }
+
+//         document.getElementById("job-description").innerHTML = `
+//             <strong>Job Description:</strong>
+//             <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-family: inherit;">
+//     ${descText}
+//             </pre>`;
+//     }
+
+
+   
+    function fetchJobDescription() {
+      $.ajax({
+        type: "GET",
+        url: "/get_job_description",
+        success: function() {
+          // updateJobInfo(response.job_title, response.job_description);
+            document.getElementById("status").innerText = "Status: Ready";
+        },
+        error: function(error) {
+          console.error("Error fetching job description:", error);
+        }
+      });
+    }
 
     function init3DAvatar() {
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        renderer = new THREE.WebGLRenderer();
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer();
 
-        const texture_loader = new THREE.TextureLoader();
-        texture_loader.load('static/background3.jpg', function(texture) {
-            scene.background = texture;
-            renderer.render(scene, camera);
-        }, undefined, function (error) {
-            console.error("Error loading background:", error);
+      const texture_loader = new THREE.TextureLoader();
+      texture_loader.load('static/background3.jpg', function(texture) {
+        scene.background = texture;
+        renderer.render(scene, camera);
+      }, undefined, function(error) {
+        console.error("Error loading background:", error);
+      });
+
+      camera.position.set(0, 1.7, 2);
+      camera.fov = 8;
+      camera.updateProjectionMatrix();
+
+      const avatarContainer = document.getElementById('three-d-avatar-container');
+      camera.aspect = avatarContainer.offsetWidth / avatarContainer.offsetHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(avatarContainer.offsetWidth, avatarContainer.offsetHeight);
+      avatarContainer.appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0x404040, 5));
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(1, 1, 1).normalize();
+      scene.add(directionalLight);
+
+      const loader = new THREE.GLTFLoader();
+      loader.load('/static/67dc0b52b7bad2cc2ac55a7e.glb', function(gltf) {
+        avatar = gltf.scene;
+        avatar.scale.set(1, 1, 1);
+        avatar.position.set(0, 0, 0);
+        scene.add(avatar);
+        avatar.traverse((child) => {
+          if (child.name.toLowerCase().includes("head")) {
+            head = child;
+          }
         });
+      }, undefined, function(error) {
+        console.error("Error loading GLB model:", error);
+      });
 
-        camera.position.set(0, 1.7, 2);
-        camera.fov = 8;
-        camera.updateProjectionMatrix();
-
-        const avatarContainer = document.getElementById('three-d-avatar-container');
-        camera.aspect = avatarContainer.offsetWidth / avatarContainer.offsetHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(avatarContainer.offsetWidth, avatarContainer.offsetHeight);
-        avatarContainer.appendChild(renderer.domElement);
-
-        scene.add(new THREE.AmbientLight(0x404040, 5));
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(1, 1, 1).normalize();
-        scene.add(directionalLight);
-
-        const loader = new THREE.GLTFLoader();
-        loader.load(baseURL + '/static/67dc0b52b7bad2cc2ac55a7e.glb', function (gltf) {
-            avatar = gltf.scene;
-            avatar.scale.set(1, 1, 1);
-            avatar.position.set(0, 0, 0);
-            scene.add(avatar);
-            avatar.traverse((child) => {
-                if (child.name.toLowerCase().includes("head")) {
-                    head = child;
-                }
-            });
-        }, undefined, function (error) {
-            console.error("Error loading GLB model:", error);
-        });
-
-        camera.position.z = 3;
+      camera.position.z = 3;
     }
 
     function animateMouth(intensity) {
-        avatar?.traverse((child) => {
-            if (child.isMesh && child.morphTargetDictionary && child.name === "Wolf3D_Head") {
-                if ("mouthOpen" in child.morphTargetDictionary) {
-                    child.morphTargetInfluences[child.morphTargetDictionary["mouthOpen"]] = intensity;
-                }
-                if ("mouthSmile" in child.morphTargetDictionary) {
-                    child.morphTargetInfluences[child.morphTargetDictionary["mouthSmile"]] = intensity * 0.3;
-                }
-            }
-        });
-    }
-
-    function syncMouthWithAudio() {
-        if (!avatar || audioPlayer.paused) {
-            animateMouth(0);
-            return;
+      avatar?.traverse((child) => {
+        if (child.isMesh && child.morphTargetDictionary && child.name === "Wolf3D_Head") {
+          if ("mouthOpen" in child.morphTargetDictionary) {
+            child.morphTargetInfluences[child.morphTargetDictionary["mouthOpen"]] = intensity;
+          }
+          if ("mouthSmile" in child.morphTargetDictionary) {
+            child.morphTargetInfluences[child.morphTargetDictionary["mouthSmile"]] = intensity * 0.3;
+          }
         }
-        let mouthIntensity = Math.abs(Math.sin(performance.now() * 0.005));
-        animateMouth(mouthIntensity);
-        requestAnimationFrame(syncMouthWithAudio);
+      });
     }
 
     function animate() {
-        requestAnimationFrame(animate);
-        renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
     }
 
     async function startWebcam() {
-        try {
-            localStream?.getAudioTracks().forEach(track => track.stop());
-            localStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: { echoCancellation: true, noiseSuppression: true }
-            });
+      try {
+        localStream?.getAudioTracks().forEach(track => track.stop());
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
 
-            document.getElementById('candidate-video').srcObject = localStream;
+        document.getElementById('candidate-video').srcObject = localStream;
 
-            localPeerConnection = new RTCPeerConnection();
-            localStream.getTracks().forEach(track => {
-                localPeerConnection.addTrack(track, localStream);
-            });
+        localPeerConnection = new RTCPeerConnection();
+        localStream.getTracks().forEach(track => {
+          localPeerConnection.addTrack(track, localStream);
+        });
 
-            localPeerConnection.onicecandidate = event => {
-                if (event.candidate) socket.emit('ice-candidate', event.candidate);
-            };
+        localPeerConnection.onicecandidate = event => {
+          if (event.candidate) socket.emit('ice-candidate', event.candidate);
+        };
 
-            remotePeerConnection = new RTCPeerConnection();
-            remotePeerConnection.ontrack = event => {
-                remoteStream = event.streams[0];
-                const remoteVideo = document.getElementById('interviewer-video');
-                remoteVideo.srcObject = remoteStream;
-                remoteVideo.muted = true;
-            };
-        } catch (error) {
-            console.error('Error accessing webcam: ', error);
+        remotePeerConnection = new RTCPeerConnection();
+        remotePeerConnection.ontrack = event => {
+          remoteStream = event.streams[0];
+          const remoteVideo = document.getElementById('interviewer-video');
+          remoteVideo.srcObject = remoteStream;
+          remoteVideo.muted = true;
+        };
+      } catch (error) {
+        console.error('Error accessing webcam: ', error);
+      }
+    }
+
+    document.getElementById("start").onclick = async () => {
+      const clickSound = new Audio();
+      clickSound.play().catch(() => {}); // unlock audio
+      
+      if (audioContext) audioContext.close();
+      audioContext = new AudioContext({ sampleRate: 16000 });
+      globalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      input = audioContext.createMediaStreamSource(globalStream);
+
+      processor = audioContext.createScriptProcessor(4096, 1, 1);
+      input.connect(processor);
+      processor.connect(audioContext.destination);
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(inputData.length * 2);
+        const view = new DataView(buffer);
+        for (let i = 0; i < inputData.length; i++) {
+          let s = Math.max(-1, Math.min(1, inputData[i]));
+          s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          view.setInt16(i * 2, s, true);
         }
-    }
+        socket.emit('audio_chunk', buffer);
+      };
 
-    function startRecording() {
-        recordedChunks = [];
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-
-                audioContext = new AudioContext();
-                microphone = audioContext.createMediaStreamSource(stream);
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 512;
-                microphone.connect(analyser);
-
-                javascriptNode = audioContext.createScriptProcessor(512, 1, 1);
-                analyser.connect(javascriptNode);
-                javascriptNode.connect(audioContext.destination);
-
-                silenceStart = null;
-
-                javascriptNode.onaudioprocess = () => {
-                    const array = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(array);
-                    let values = 0;
-                    for (let i = 0; i < array.length; i++) values += array[i];
-                    const average = values / array.length / 255;
-
-                    if (average < SILENCE_THRESHOLD) {
-                        if (silenceStart === null) {
-                            silenceStart = Date.now();
-                        } else if (Date.now() - silenceStart > SILENCE_DELAY) {
-                            stopRecording();  // Stop on silence
-                        }
-                    } else {
-                        silenceStart = null; // Reset silence timer
-                    }
-                };
-
-                mediaRecorder.ondataavailable = event => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
-
-                mediaRecorder.onstop = () => {
-                    stream.getTracks().forEach(track => track.stop());
-
-                    cleanupAudio();
-
-                    const blob = new Blob(recordedChunks, { type: 'audio/wav' });
-                    const formData = new FormData();
-                    formData.append("audio", blob, "recording.wav");
-
-                    // Send to backend
-                    $.ajax({
-                        type: "POST",
-                        url: "/transcribe_audio",
-                        data: formData,
-                        processData: false,      // Important: prevent jQuery from processing FormData
-                        contentType: false,      // Important: prevent jQuery from setting content type
-                        success: function(response) {
-                            console.log("Transcript:", response.transcript);
-                            $("#user-input").val(response.transcript);
-                            sendMessage();
-                        },
-                        error: function(error) {
-                            console.error("Error transcribing audio:", error);
-                        }
-                    });
-                    // recordedChunks = [];
-
-                };
-
-                mediaRecorder.start();
-                console.log("Recording started");
-            })
-            .catch(console.error);
-    }
-
-    function cleanupAudio() {
-        javascriptNode?.disconnect();
-        analyser?.disconnect();
-        microphone?.disconnect();
-        audioContext?.close();
-    }
-
-
-    function stopRecording() {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop();
-        }
-    }
-
-    document.getElementById("audio-player").onended = function() {
-        animateMouth(0);
-        startRecording();
+      document.getElementById("text").textContent = "";
+      console.log("Recording started");
     };
 
-    function updateJobInfo(title, description) {
-        document.getElementById("job-title").innerText = `Job Title: ${title}`;
-        document.getElementById("job-description").innerHTML = `
-            <strong>Job Description:</strong>
-            <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-family: inherit;"> 
-            ${description}`;
-    }
+    document.getElementById("stop").onclick = () => {
+      if (processor) {
+        processor.disconnect();
+        processor = null;
+      }
+      if (input) {
+        input.disconnect();
+        input = null;
+      }
+      if (globalStream) {
+        globalStream.getTracks().forEach(track => track.stop());
+      }
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      console.log("Recording stopped");
+    };
 
-    function fetchJobDescription() {
-        $.ajax({
-            type: "GET",
-            url: "/get_job_description",
-            success: function(response) {
-                updateJobInfo(response.job_title, response.job_description);
-            },
-            error: function(error) {
-                console.error("Error fetching job description:", error);
-            }
+    socket.on('transcript', (text) => {
+      document.getElementById("text").textContent = text;
+    });
+     
+    socket.on('bot_reply', function(data) {
+      const { response, audio, score, average_score } = data;
+      console.log("Received audio URL:", audio);
+
+
+      // Display response
+      document.getElementById('bot-reply').innerHTML = `<p><strong>Bot:</strong> ${response}</p>`;
+
+      if (audio) {
+        const audioElement = new Audio(audio + "?t=" + new Date().getTime());
+
+        audioElement.play().then(() => {
+          console.log("Audio playback started");
+        }).catch((err) => {
+          console.error("Audio playback error:", err);
         });
-    }
-
-    function sendMessage() {
-        const userInput = $("#user-input").val().trim();
-        if (userInput === "") return;
-
-        $("#chat-box").append(`<div class="message user-message">${userInput}</div>`);
-        $("#chat-box").append(`<div class="message bot-message loading">Typing...</div>`);
-        $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
-
-        $.ajax({
-            type: "POST",
-            url: "/ask_scenario",
-            data: { user_input: userInput },
-            success: function(response) {
-                $(".loading").remove();
-                $("#chat-box").append(`<div class="message bot-message">${response.response}</div>`);
-                $("#chat-box").scrollTop($("#chat-box")[0].scrollHeight);
-
-                if (response.score !== undefined) {
-                    $("#score-display").text(`Score: ${response.score.toFixed(2)} / 2`).show();
-                }
-
-                if (response.job_title && response.job_description) {
-                    updateJobInfo(response.job_title, response.job_description);
-                }
-
-                const audioPlayer = document.getElementById("audio-player");
-
-                localStream?.getAudioTracks().forEach(track => {
-                    track.stop();
-                    localStream.removeTrack(track);
-                });
-
-                audioPlayer.src = response.audio + "?t=" + new Date().getTime();
-                audioPlayer.style.display = "block";
-                audioPlayer.volume = 0.5;
-                audioPlayer.play();
-                syncMouthWithAudio();
-            }
-        });
-
-        $("#user-input").val("");
-    }
+      }
+    });
 
     startWebcam();
-    startRecording();
     init3DAvatar();
     animate();
     window.onload = fetchJobDescription;
-
-    $("#user-input").keypress(function(event) {
-        if (event.which === 13) {
-            sendMessage();
-        }
-    });
-    </script>
-
-
-
-
+  </script>
 </body>
 </html>

@@ -4,8 +4,10 @@ flask-cors>=3.0
 python-dotenv>=1.0
 openai>=1.0
 eventlet>=0.33
-pandas>=1.0
+pandas>=1.
 numpy>=1.0
+scipy>=1.0
 openpyxl>=3.0
 scikit-learn>=0.24
 google-cloud-texttospeech
+vosk

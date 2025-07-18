@@ -1,22 +1,23 @@
-# Use a Python base image
 FROM python:3.10-slim
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the requirements.txt into the container
-COPY requirements.txt .
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y wget unzip libsndfile1 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
+# Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the app files into the container
+# Download Vosk model
+COPY models/ models/
+
+# Copy app code
 COPY . .
 
-# Expose the port that Flask app will run on
+# Expose Flask port
 EXPOSE 8080
-
-# Run the Flask app using Gunicorn (production-ready WSGI server)
-#CMD ["gunicorn", "-k", "eventlet", "-b", "0.0.0.0:8080", "app:app"]
 
 CMD ["python", "app.py"]

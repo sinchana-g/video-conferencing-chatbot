@@ -1,17 +1,15 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, send, emit
-from flask_cors import CORS
 import openai
 import os
 from dotenv import load_dotenv
-import eventlet
 import re
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import normalize
 from sklearn.metrics.pairwise import cosine_similarity
-from google.cloud import texttospeech
-
+import vosk
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,8 +17,10 @@ load_dotenv()
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
-CORS(app, origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+model = vosk.Model("models/vosk-model-small-en-us-0.15")
+recognizers = {}
 
 scenarios_df = pd.read_excel("Cleaned_Scenarios_by_Skill.xlsx")
 scenarios_df.columns = scenarios_df.columns.str.strip()
@@ -41,20 +41,20 @@ conversation_history = []
 scenario_history = []
 
 
-def generate_job_description(job_title):
-    prompt = f"""
-    Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
+# def generate_job_description(job_title):
+#     prompt = f"""
+#     Write a detailed job description for a {job_title}. Include responsibilities, qualifications, and key skills required.
 
-    Do not use markdown or formatting symbols (such as **, ##, -, etc.). Just write clean plain text in full sentences and paragraphs.
-    """
+#     Do not use markdown or formatting symbols (such as **, ##, -, etc.). Just write clean plain text in full sentences and paragraphs.
+#     """
 
-    response = client.chat.completions.create(
-        model="gpt-4.1",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=500,
-        temperature=0.7
-    )
-    return response.choices[0].message.content.strip()
+#     response = client.chat.completions.create(
+#         model="gpt-4.1",
+#         messages=[{"role": "user", "content": prompt}],
+#         max_tokens=500,
+#         temperature=0.7
+#     )
+#     return response.choices[0].message.content.strip()
 
 
 def extract_skills_from_jd(jd_text):
@@ -301,52 +301,6 @@ def generate_speech(text):
     return audio_path
 
 
-@app.route('/transcribe_audio', methods=['POST'])
-def transcribe_audio():
-    if 'audio' not in request.files:
-        return {'error': 'No audio file provided'}, 400
-
-    audio_file = request.files['audio']
-    
-    # Save to temp file
-    temp_path = "temp_audio.webm"
-    audio_file.save(temp_path)
-
-    # Transcribe using OpenAI 
-    transcription = client.audio.transcriptions.create(
-        model="gpt-4o-transcribe",  # or "gpt-4o"
-        file=open(temp_path, "rb"),
-        response_format="text",
-        language="en"
-    )
-
-    return {'transcript': transcription}
-
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/get_job_description', methods=['GET'])
-def get_job_description():
-    global current_job_description 
-    current_job_description = generate_job_description(current_job_title)
-    global scenario_list
-    scenario_list = get_scenarios(current_job_description)
-    global adapted_scenarios 
-    adapted_scenarios = []
-    for _, scenario in scenario_list:
-        adapted = generate_scenario_text(current_job_title, current_job_description, scenario)
-        adapted_scenarios.append(adapted)
-    # Reset tracking
-    scenario_index = 0
-    follow_up_count = 0
-    
-    return jsonify({
-        'job_title': current_job_title,
-        'job_description': current_job_description
-    })
-
 @app.route('/ask', methods=['POST'])
 def ask():
     user_input = request.form['user_input']
@@ -361,11 +315,9 @@ def ask():
     })
 
 
-@app.route('/ask_scenario', methods=['POST'])
-def ask_scenario():
+def ask_scenario(user_input):
     global scenario_index, follow_up_count, follow_up_question, scenario_scores
     
-    user_input = request.form['user_input']
     
     # If done with all scenarios
     if scenario_index >= len(scenario_list):
@@ -402,13 +354,71 @@ def ask_scenario():
     if follow_up_count >= 3:
         follow_up_count = 0
         scenario_index += 1
+        
+    print("response generated")
 
     audio_url = generate_speech(bot_response)  # Reuse existing TTS function
+    
+    print("audio generated")
 
-    return jsonify({
+    socketio.emit('bot_reply', {
         'response': bot_response,
         'audio': audio_url,
-        'score': score })
+        'score': score
+    }, room=request.sid)
+
+
+
+
+# @app.route('/transcribe_audio', methods=['POST'])
+# def transcribe_audio():
+#     if 'audio' not in request.files:
+#         return {'error': 'No audio file provided'}, 400
+
+#     audio_file = request.files['audio']
+    
+#     # Save to temp file
+#     temp_path = "temp_audio.webm"
+#     audio_file.save(temp_path)
+
+#     # Transcribe using OpenAI 
+#     transcription = client.audio.transcriptions.create(
+#         model="gpt-4o-transcribe",  # or "gpt-4o"
+#         file=open(temp_path, "rb"),
+#         response_format="text",
+#         language="en"
+#     )
+
+#     return {'transcript': transcription}
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/get_job_description', methods=['GET'])
+def get_job_description():
+    global current_job_description 
+    # current_job_description = generate_job_description(current_job_title)
+    with open('templates/jd.json', 'r') as f:
+        current_job_description = json.load(f).get("job_description")
+    global scenario_list
+    scenario_list = get_scenarios(current_job_description)
+    global adapted_scenarios 
+    adapted_scenarios = []
+    for _, scenario in scenario_list:
+        adapted = generate_scenario_text(current_job_title, current_job_description, scenario)
+        adapted_scenarios.append(adapted)
+    # Reset tracking
+    global scenario_index, follow_up_count
+    scenario_index = 0
+    follow_up_count = 0
+    
+    # return jsonify({
+    #     'job_title': current_job_title,
+    #     'job_description': current_job_description
+    # })
+    return Response(status=204)
 
 
 # WebRTC signaling routes using Flask-SocketIO
@@ -431,9 +441,44 @@ def handle_ice_candidate(data):
     # Send the ICE candidate to the remote peer
     emit('ice-candidate', data, broadcast=True)
 
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
-    os.makedirs("static/audio", exist_ok=True)
-    # socketio.run(app, host='127.0.0.1', port=5000)
-    socketio.run(app, host='0.0.0.0', port=port, debug=True)
 
+@socketio.on('connect')
+def handle_connect():
+    recognizers[request.sid] = vosk.KaldiRecognizer(model, 16000)
+    print(f"Client connected: {request.sid}")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    recognizers.pop(request.sid, None)
+    print(f"Client disconnected: {request.sid}")
+
+@socketio.on('audio_chunk')
+def handle_audio(data):
+    rec = recognizers.get(request.sid)
+    if not rec:
+        print("No recognizer found for this client")
+        return
+
+    if not data:
+        print("Empty data received, skipping")
+        return
+
+    # data is expected to be bytes (raw PCM 16k mono)
+    # print(f"Received audio chunk length: {len(data)} bytes")
+
+    try:
+        if rec.AcceptWaveform(data):
+            result = json.loads(rec.Result())
+            full_text = result.get("text", "").strip()
+            socketio.emit('transcript', full_text, room=request.sid)
+            ask_scenario(full_text)
+            rec.Reset()
+        else:
+            partial = json.loads(rec.PartialResult())
+            socketio.emit('transcript', partial.get("partial", ""), room=request.sid)
+    except Exception as e:
+        print(f"Exception in Vosk recognizer: {e}")
+
+
+if __name__ == '__main__':
+    socketio.run(app, host='0.0.0.0', port=8080)
