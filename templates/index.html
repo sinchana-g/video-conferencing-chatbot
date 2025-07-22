@@ -146,7 +146,7 @@
 
 //         let descText = "";
 //         if (typeof description === "object") {
-//             descText = JSON.stringify(description, null, 2); // pretty print JSON
+//             descText = JSON.stringify(description, null, 2); 
 //         } else {
 //             descText = description;
 //         }
@@ -270,52 +270,52 @@
     }
 
     document.getElementById("start").onclick = async () => {
-      const clickSound = new Audio();
-      clickSound.play().catch(() => {}); // unlock audio
-      
-      if (audioContext) audioContext.close();
+      if (audioContext) {
+        await audioContext.close();
+      }
       audioContext = new AudioContext({ sampleRate: 16000 });
+
+      await audioContext.audioWorklet.addModule('/static/processor.js'); // Adjust path if needed
       globalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
       input = audioContext.createMediaStreamSource(globalStream);
+      const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
 
-      processor = audioContext.createScriptProcessor(4096, 1, 1);
-      input.connect(processor);
-      processor.connect(audioContext.destination);
-
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        const buffer = new ArrayBuffer(inputData.length * 2);
+      workletNode.port.onmessage = (event) => {
+        const audioChunk = event.data;
+        // Convert Float32 audio samples to 16-bit PCM
+        const buffer = new ArrayBuffer(audioChunk.length * 2);
         const view = new DataView(buffer);
-        for (let i = 0; i < inputData.length; i++) {
-          let s = Math.max(-1, Math.min(1, inputData[i]));
+        for (let i = 0; i < audioChunk.length; i++) {
+          let s = Math.max(-1, Math.min(1, audioChunk[i]));
           s = s < 0 ? s * 0x8000 : s * 0x7FFF;
           view.setInt16(i * 2, s, true);
         }
-        socket.emit('audio_chunk', buffer);
+        socket.emit('audio_chunk', new Uint8Array(buffer));
       };
 
+      input.connect(workletNode);
+      workletNode.connect(audioContext.destination);
+
       document.getElementById("text").textContent = "";
-      console.log("Recording started");
+      console.log("Recording started (AudioWorkletNode)");
     };
 
     document.getElementById("stop").onclick = () => {
-      if (processor) {
-        processor.disconnect();
-        processor = null;
-      }
       if (input) {
         input.disconnect();
         input = null;
-      }
-      if (globalStream) {
-        globalStream.getTracks().forEach(track => track.stop());
       }
       if (audioContext) {
         audioContext.close();
         audioContext = null;
       }
+      if (globalStream) {
+        globalStream.getTracks().forEach(track => track.stop());
+      }
       console.log("Recording stopped");
     };
+
 
     socket.on('transcript', (text) => {
       document.getElementById("text").textContent = text;

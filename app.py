@@ -301,18 +301,19 @@ def generate_speech(text):
     return audio_path
 
 
-@app.route('/ask', methods=['POST'])
-def ask():
-    user_input = request.form['user_input']
+def ask(user_input, sid):
+    # user_input = request.form['user_input']
+    print("inside ask")
     
     # Process the user input and generate a bot response
     bot_response = chatbot_response_with_history(user_input, current_job_description)
     audio_url = generate_speech(bot_response)  # Generate the speech file and get the URL
     
-    return jsonify({
+    
+    socketio.emit('bot_reply', {
         'response': bot_response,
-        'audio': audio_url,
-    })
+        'audio': audio_url
+    }, room=sid)
 
 
 def ask_scenario(user_input):
@@ -370,28 +371,6 @@ def ask_scenario(user_input):
 
 
 
-# @app.route('/transcribe_audio', methods=['POST'])
-# def transcribe_audio():
-#     if 'audio' not in request.files:
-#         return {'error': 'No audio file provided'}, 400
-
-#     audio_file = request.files['audio']
-    
-#     # Save to temp file
-#     temp_path = "temp_audio.webm"
-#     audio_file.save(temp_path)
-
-#     # Transcribe using OpenAI 
-#     transcription = client.audio.transcriptions.create(
-#         model="gpt-4o-transcribe",  # or "gpt-4o"
-#         file=open(temp_path, "rb"),
-#         response_format="text",
-#         language="en"
-#     )
-
-#     return {'transcript': transcription}
-
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -422,6 +401,14 @@ def get_job_description():
 
 
 # WebRTC signaling routes using Flask-SocketIO
+
+@socketio.on_error_default  # handles all namespaces
+def default_error_handler(e):
+    print('🔥 SocketIO error:', e)
+
+@socketio.on('*')
+def catch_all(event, data):
+    print(f"📡 Caught event: {event}, data: {type(data)}")
 
 @socketio.on('offer')
 def handle_offer(data):
@@ -454,6 +441,7 @@ def handle_disconnect():
 
 @socketio.on('audio_chunk')
 def handle_audio(data):
+    # print("handle_audio() triggered")
     rec = recognizers.get(request.sid)
     if not rec:
         print("No recognizer found for this client")
@@ -472,6 +460,8 @@ def handle_audio(data):
             full_text = result.get("text", "").strip()
             socketio.emit('transcript', full_text, room=request.sid)
             ask_scenario(full_text)
+            # print("calling ask")
+            # ask(full_text, request.sid)
             rec.Reset()
         else:
             partial = json.loads(rec.PartialResult())
