@@ -264,7 +264,7 @@ def chatbot_response_with_history(user_input, job_description=None):
         model="gpt-4.1", 
         messages=[
             {"role": "system", "content": prompt},
-            *conversation_history[-4], #only last few exchanges to stay focused
+            *conversation_history[-4:], #only last few exchanges to stay focused
             {"role": "user", "content": user_input},
         ],
         max_tokens=200,  # Adjust for longer/shorter responses
@@ -441,7 +441,6 @@ def handle_disconnect():
 
 @socketio.on('audio_chunk')
 def handle_audio(data):
-    # print("handle_audio() triggered")
     rec = recognizers.get(request.sid)
     if not rec:
         print("No recognizer found for this client")
@@ -456,14 +455,17 @@ def handle_audio(data):
 
     try:
         if rec.AcceptWaveform(data):
+            print("full")
             result = json.loads(rec.Result())
             full_text = result.get("text", "").strip()
             socketio.emit('transcript', full_text, room=request.sid)
-            ask_scenario(full_text)
-            # print("calling ask")
-            # ask(full_text, request.sid)
+            # print("calling ask scenario")
+            # ask_scenario(full_text)
+            print("calling ask")
+            ask(full_text, request.sid)
             rec.Reset()
         else:
+            # print("partial")
             partial = json.loads(rec.PartialResult())
             socketio.emit('transcript', partial.get("partial", ""), room=request.sid)
     except Exception as e:
