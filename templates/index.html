@@ -268,11 +268,12 @@
         console.error('Error accessing webcam: ', error);
       }
     }
-
-    document.getElementById("start").onclick = async () => {
+      
+    async function startRecording() {
       if (audioContext) {
         await audioContext.close();
       }
+
       audioContext = new AudioContext({ sampleRate: 16000 });
 
       await audioContext.audioWorklet.addModule('/static/processor.js'); // Adjust path if needed
@@ -299,9 +300,12 @@
 
       document.getElementById("text").textContent = "";
       console.log("Recording started (AudioWorkletNode)");
-    };
+    }
 
-    document.getElementById("stop").onclick = () => {
+
+    document.getElementById("start").onclick = startRecording;
+      
+    function stopRecording() {
       if (input) {
         input.disconnect();
         input = null;
@@ -314,7 +318,10 @@
         globalStream.getTracks().forEach(track => track.stop());
       }
       console.log("Recording stopped");
-    };
+    }
+
+
+    document.getElementById("stop").onclick = stopRecording;
 
 
     socket.on('transcript', (text) => {
@@ -322,6 +329,7 @@
     });
      
     socket.on('bot_reply', function(data) {
+      stopRecording;
       const { response, audio, score, average_score } = data;
       console.log("Received audio URL:", audio);
 
@@ -338,6 +346,7 @@
           console.error("Audio playback error:", err);
         });
       }
+      startRecording;
     });
 
     startWebcam();
